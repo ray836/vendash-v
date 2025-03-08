@@ -5,14 +5,25 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Package, AlertCircle, BarChart3 } from "lucide-react"
 import Link from "next/link"
 
+// Add interface for machine data
+interface VendingMachine {
+  id: string
+  location: string
+  type: string
+  status: "Online" | "Maintenance" | "Low Stock" | "Offline"
+  inventory: number
+  lastRestocked: string
+  revenue: string
+  alerts: number
+}
+
 // Sample vending machine data
-const vendingMachines = [
+const vendingMachines: VendingMachine[] = [
   {
     id: "VM001",
     location: "Main Building, Floor 1",
@@ -76,7 +87,7 @@ const vendingMachines = [
 ]
 
 // Component for a single vending machine card
-function VendingMachineCard({ machine }) {
+function VendingMachineCard({ machine }: { machine: VendingMachine }) {
   return (
     <Card className="w-full">
       <CardHeader className="pb-2">
@@ -102,7 +113,7 @@ function VendingMachineCard({ machine }) {
                 ? "destructive"
                 : machine.status === "Low Stock"
                 ? "secondary"
-                : "warning"
+                : "outline"
             }
           >
             {machine.status}

@@ -221,13 +221,46 @@ function StatusBadge({ status }: { status: string }) {
   }
 }
 
+// First, define proper types for the sales data
+type DailySales = {
+  day: string
+  sales: number
+}
+
+type WeeklySales = {
+  week: string
+  sales: number
+}
+
+type MonthlySales = {
+  month: string
+  sales: number
+}
+
+type SalesData = DailySales | WeeklySales | MonthlySales
+
+// Update the component to properly type check
 function SalesChart({
   data,
   period,
 }: {
-  data: any[]
+  data: SalesData[]
   period: "daily" | "weekly" | "monthly"
 }) {
+  // Helper function to type guard the data
+  const getLabel = (item: SalesData) => {
+    if (period === "daily" && "day" in item) {
+      return item.day
+    }
+    if (period === "weekly" && "week" in item) {
+      return item.week
+    }
+    if (period === "monthly" && "month" in item) {
+      return item.month
+    }
+    return ""
+  }
+
   const maxSales = Math.max(...data.map((item) => item.sales))
 
   return (
@@ -241,11 +274,7 @@ function SalesChart({
               style={{ height: `${height}%` }}
             />
             <span className="text-xs text-muted-foreground">
-              {period === "daily"
-                ? item.day
-                : period === "weekly"
-                ? item.week
-                : item.month}
+              {getLabel(item)}
             </span>
           </div>
         )

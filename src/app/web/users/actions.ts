@@ -38,6 +38,7 @@ export async function getUsers() {
     lastName: user.lastName,
     email: user.email,
     role: user.role,
+    organizationId: user.organizationId,
   }))
 }
 

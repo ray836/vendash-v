@@ -41,20 +41,22 @@ import {
 } from "@/components/ui/dialog"
 
 // Sample initial locations - in a real app, this would come from your backend
-const initialLocations = [
+const initialLocations: Location[] = [
   {
     id: "1",
     name: "Main Building - Floor 1",
-    building: "Main Building",
-    floor: "1",
+    address: "Main Building, Floor 1",
   },
   {
     id: "2",
     name: "Science Block - Floor 2",
-    building: "Science Block",
-    floor: "2",
+    address: "Science Block, Floor 2",
   },
-  { id: "3", name: "Library - Floor 1", building: "Library", floor: "1" },
+  {
+    id: "3",
+    name: "Library - Floor 1",
+    address: "Library, Floor 1",
+  },
 ]
 
 const formSchema = z.object({
@@ -81,7 +83,18 @@ const locationFormSchema = z.object({
   floor: z.string().min(1, "Floor number is required"),
 })
 
-function AddLocationDialog({ onLocationAdded }) {
+// Update the Location interface to match the actual data structure
+interface Location {
+  id: string
+  name: string
+  address: string
+}
+
+function AddLocationDialog({
+  onLocationAdded,
+}: {
+  onLocationAdded: (location: Location) => void
+}) {
   const [open, setOpen] = useState(false)
   const locationForm = useForm<z.infer<typeof locationFormSchema>>({
     resolver: zodResolver(locationFormSchema),
@@ -92,11 +105,10 @@ function AddLocationDialog({ onLocationAdded }) {
   })
 
   const onSubmit = (values: z.infer<typeof locationFormSchema>) => {
-    const newLocation = {
+    const newLocation: Location = {
       id: Date.now().toString(),
       name: `${values.building} - Floor ${values.floor}`,
-      building: values.building,
-      floor: values.floor,
+      address: `${values.building}, Floor ${values.floor}`,
     }
     onLocationAdded(newLocation)
     locationForm.reset()
@@ -168,7 +180,7 @@ export function NewVendingMachineForm() {
     },
   })
 
-  const handleLocationAdded = (newLocation) => {
+  const handleLocationAdded = (newLocation: Location) => {
     setLocations([...locations, newLocation])
   }
 

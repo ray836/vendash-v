@@ -477,7 +477,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                     Machine Not Configured
                   </h3>
                   <p className="text-muted-foreground mb-4">
-                    This machine hasn't been set up with products yet.
+                    This machine hasn&apos;t been set up with products yet.
                   </p>
                   <Button onClick={handleSetupClick}>Set Up Machine</Button>
                 </div>

@@ -6,9 +6,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
-  BarChart3,
   TrendingUp,
-  ShoppingCart,
   Calendar,
   Clock,
   PlusCircle,
@@ -41,13 +39,54 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+
+interface SalesData {
+  date?: string
+  week?: string
+  month?: string
+  quantity: number
+  revenue?: number
+  sales?: number // For monthly data
+}
+
+interface Product {
+  id: string
+  name: string
+  image: string
+  price: number
+  costPrice: number
+  profitMargin: number
+  sku: string
+  barcode: string
+  supplier: string
+  vendorUrl: string
+  leadTime: number
+  caseQuantity: number
+  minOrderQuantity: number
+  inventory: {
+    total: number
+    storage: number
+    machines: number
+  }
+  reorderPoint: number
+  reorderStatus: "critical" | "warning" | "ok"
+  daysUntilStockout: number
+  sales: {
+    daily: number
+    weekly: number
+    trend: "up" | "down" | "stable"
+    velocity: "high" | "medium" | "low"
+    velocityRank: number
+  }
+  lastOrdered: string
+  salesHistory: SalesData[]
+  weeklySales: SalesData[] // Now matches the actual data structure
+  monthlySales: SalesData[] // Now matches the actual data structure
+}
+
+interface SalesGraphProps {
+  product: Product
+}
 
 // Extended product data with more details for the product detail page
 const getProductData = (id: string) => {
@@ -195,6 +234,24 @@ const getProductData = (id: string) => {
       { date: "2023-09-22", quantity: 120, cases: 5, status: "delivered" },
       { date: "2023-08-30", quantity: 100, cases: 4, status: "delivered" },
     ],
+    monthlySales: [
+      {
+        month: "Jan",
+        quantity: Math.floor(300 + Math.random() * 100),
+        sales: Math.floor(300 + Math.random() * 100),
+      },
+      {
+        month: "Feb",
+        quantity: Math.floor(300 + Math.random() * 100),
+        sales: Math.floor(300 + Math.random() * 100),
+      },
+      {
+        month: "Mar",
+        quantity: Math.floor(300 + Math.random() * 100),
+        sales: Math.floor(300 + Math.random() * 100),
+      },
+      // ... add more months as needed
+    ],
   }
 }
 
@@ -215,12 +272,12 @@ const productInventory = [
     sales: {
       daily: 24,
       weekly: 168,
-      trend: "up", // up, down, stable
-      velocity: "high", // high, medium, low
-      velocityRank: 3, // Numeric rank for sorting (higher = faster selling)
+      trend: "up" as const,
+      velocity: "high" as const,
+      velocityRank: 3,
     },
     reorderPoint: 100,
-    reorderStatus: "ok", // ok, warning, critical
+    reorderStatus: "ok" as const,
     daysUntilStockout: 10,
   },
   {
@@ -238,12 +295,12 @@ const productInventory = [
     sales: {
       daily: 18,
       weekly: 126,
-      trend: "stable",
-      velocity: "medium",
+      trend: "stable" as const,
+      velocity: "medium" as const,
       velocityRank: 2,
     },
     reorderPoint: 100,
-    reorderStatus: "ok",
+    reorderStatus: "ok" as const,
     daysUntilStockout: 10,
   },
   {
@@ -261,12 +318,12 @@ const productInventory = [
     sales: {
       daily: 15,
       weekly: 105,
-      trend: "up",
-      velocity: "medium",
+      trend: "up" as const,
+      velocity: "medium" as const,
       velocityRank: 2,
     },
     reorderPoint: 100,
-    reorderStatus: "warning",
+    reorderStatus: "warning" as const,
     daysUntilStockout: 8,
   },
   {
@@ -284,12 +341,12 @@ const productInventory = [
     sales: {
       daily: 22,
       weekly: 154,
-      trend: "up",
-      velocity: "high",
+      trend: "up" as const,
+      velocity: "high" as const,
       velocityRank: 3,
     },
     reorderPoint: 80,
-    reorderStatus: "critical",
+    reorderStatus: "critical" as const,
     daysUntilStockout: 3,
   },
   {
@@ -307,12 +364,12 @@ const productInventory = [
     sales: {
       daily: 20,
       weekly: 140,
-      trend: "stable",
-      velocity: "medium",
+      trend: "stable" as const,
+      velocity: "medium" as const,
       velocityRank: 2,
     },
     reorderPoint: 80,
-    reorderStatus: "ok",
+    reorderStatus: "ok" as const,
     daysUntilStockout: 7,
   },
   {
@@ -330,12 +387,12 @@ const productInventory = [
     sales: {
       daily: 25,
       weekly: 175,
-      trend: "up",
-      velocity: "high",
+      trend: "up" as const,
+      velocity: "high" as const,
       velocityRank: 3,
     },
     reorderPoint: 80,
-    reorderStatus: "critical",
+    reorderStatus: "critical" as const,
     daysUntilStockout: 2,
   },
   {
@@ -353,12 +410,12 @@ const productInventory = [
     sales: {
       daily: 15,
       weekly: 105,
-      trend: "down",
-      velocity: "low",
+      trend: "down" as const,
+      velocity: "low" as const,
       velocityRank: 1,
     },
     reorderPoint: 80,
-    reorderStatus: "ok",
+    reorderStatus: "ok" as const,
     daysUntilStockout: 13,
   },
   {
@@ -376,17 +433,21 @@ const productInventory = [
     sales: {
       daily: 12,
       weekly: 84,
-      trend: "stable",
-      velocity: "medium",
+      trend: "stable" as const,
+      velocity: "medium" as const,
       velocityRank: 2,
     },
     reorderPoint: 80,
-    reorderStatus: "warning",
+    reorderStatus: "warning" as const,
     daysUntilStockout: 7,
   },
 ]
 
-function InventoryStatusBadge({ status }: { status: string }) {
+function InventoryStatusBadge({
+  status,
+}: {
+  status: "ok" | "warning" | "critical"
+}) {
   if (status === "ok") {
     return (
       <Badge
@@ -417,7 +478,7 @@ function InventoryStatusBadge({ status }: { status: string }) {
   }
 }
 
-function SalesTrendIndicator({ trend }: { trend: string }) {
+function SalesTrendIndicator({ trend }: { trend: "up" | "down" | "stable" }) {
   if (trend === "up") {
     return <TrendingUp className="h-4 w-4 text-green-600" />
   } else if (trend === "down") {
@@ -427,7 +488,11 @@ function SalesTrendIndicator({ trend }: { trend: string }) {
   }
 }
 
-function SalesVelocityBadge({ velocity }: { velocity: string }) {
+function SalesVelocityBadge({
+  velocity,
+}: {
+  velocity: "high" | "medium" | "low"
+}) {
   if (velocity === "high") {
     return <Badge className="bg-green-600">High</Badge>
   } else if (velocity === "medium") {
@@ -446,224 +511,35 @@ function formatDate(dateString: string) {
   }).format(date)
 }
 
-// Replace the SalesGraph component with this updated version
-function SalesGraph({ product }: { product: any }) {
-  const [period, setPeriod] = useState<"day" | "week" | "month">("week")
-
-  // Monthly sales data (generate if not provided)
-  const monthlySales = [
-    {
-      month: "Nov 2022",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Dec 2022",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Jan 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Feb 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Mar 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Apr 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "May 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Jun 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Jul 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Aug 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Sep 2023",
-      quantity: Math.floor(300 + Math.random() * 100),
-      revenue: Math.floor(750 + Math.random() * 250),
-    },
-    {
-      month: "Oct 2023",
-      quantity: Math.floor(350 + Math.random() * 150),
-      revenue: Math.floor(850 + Math.random() * 300),
-    },
-  ]
-
-  // Helper function to get data based on selected period
-  const getData = () => {
-    switch (period) {
-      case "day":
-        return {
-          data: product.salesHistory,
-          labelKey: "date",
-          format: (item: any) => formatDate(item.date).split(" ")[1],
-        }
-      case "week":
-        return {
-          data: product.weeklySales,
-          labelKey: "week",
-          format: (item: any) => item.week,
-        }
-      case "month":
-        return {
-          data: monthlySales,
-          labelKey: "month",
-          format: (item: any) => item.month,
-        }
+// Update the SalesGraph component to handle different data structures
+function SalesGraph({ product }: SalesGraphProps) {
+  const getPeriodData = () => {
+    return {
+      data: product.weeklySales.map((item) => ({
+        ...item,
+        quantity: item.quantity || item.sales || 0, // Handle both quantity and sales fields
+      })),
     }
   }
 
-  const { data, labelKey, format } = getData()
-
-  // Calculate totals
-  const totalQuantity = data.reduce(
-    (sum: number, item: any) => sum + item.quantity,
-    0
-  )
-  const totalRevenue = data.reduce(
-    (sum: number, item: any) =>
-      sum + (item.revenue || item.quantity * product.price),
-    0
-  )
-  const totalProfit = data.reduce(
-    (sum: number, item: any) =>
-      sum +
-      (item.revenue || item.quantity * product.price) *
-        (product.profitMargin / 100),
-    0
-  )
-  const averageQuantity = Math.round(totalQuantity / data.length)
-  const peakQuantity = Math.max(...data.map((item: any) => item.quantity))
-
-  // Handle period change
-  const handlePeriodChange = (value: string) => {
-    if (value === "day" || value === "week" || value === "month") {
-      setPeriod(value)
-    }
-  }
+  const { data } = getPeriodData()
+  const peakQuantity = Math.max(...data.map((item: SalesData) => item.quantity))
 
   return (
-    <div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">
-            Total Sales (
-            {period === "day"
-              ? "14 days"
-              : period === "week"
-              ? "12 weeks"
-              : "12 months"}
-            )
-          </h3>
-          <div className="flex items-center">
-            <ShoppingCart className="h-5 w-5 mr-2 text-primary" />
-            <span className="text-2xl font-bold">{totalQuantity} units</span>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Total Revenue</h3>
-          <div className="flex items-center">
-            <BarChart3 className="h-5 w-5 mr-2 text-primary" />
-            <span className="text-2xl font-bold">
-              ${totalRevenue.toFixed(2)}
-            </span>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Total Profit</h3>
-          <div className="flex items-center">
-            <TrendingUp className="h-5 w-5 mr-2 text-primary" />
-            <span className="text-2xl font-bold">
-              ${totalProfit.toFixed(2)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Period selector directly above the graph */}
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-sm font-medium">
-          {period === "day"
-            ? "Daily"
-            : period === "week"
-            ? "Weekly"
-            : "Monthly"}{" "}
-          Sales Trend
-        </h3>
-        <Select value={period} onValueChange={handlePeriodChange}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select period" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="day">Daily (14 days)</SelectItem>
-            <SelectItem value="week">Weekly (12 weeks)</SelectItem>
-            <SelectItem value="month">Monthly (12 months)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Sales Graph */}
+    <div className="space-y-6">
       <div className="h-[300px] flex items-end gap-2">
-        {data.map((item: any, i: number) => {
+        {data.map((item: SalesData, i: number) => {
           const height = (item.quantity / peakQuantity) * 100
           return (
             <div
               key={i}
-              className="flex-1 flex flex-col items-center gap-1 group relative"
+              className="relative flex-1 group"
+              style={{ height: `${height}%` }}
             >
-              <div
-                className="w-full bg-primary/80 hover:bg-primary rounded-t-sm transition-colors"
-                style={{ height: `${height}%` }}
-              />
-              <span className="text-xs text-muted-foreground truncate w-full text-center">
-                {format(item)}
-              </span>
-
-              {/* Tooltip */}
-              <div className="absolute bottom-full mb-2 bg-background border rounded-md p-2 shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none w-36 z-10">
-                <p className="text-xs font-medium">{item[labelKey]}</p>
-                <p className="text-xs">Units: {item.quantity}</p>
-                <p className="text-xs">
-                  Revenue: $
-                  {(item.revenue || item.quantity * product.price).toFixed(2)}
-                </p>
-              </div>
+              {/* Bar content */}
             </div>
           )
         })}
-      </div>
-      <div className="flex justify-between text-sm text-muted-foreground mt-2">
-        <span>
-          Average: {averageQuantity} units/{period}
-        </span>
-        <span>
-          Peak: {peakQuantity} units/{period}
-        </span>
       </div>
     </div>
   )
@@ -677,7 +553,6 @@ export function ProductDetail({ productId }: { productId: string }) {
   const [reorderCases, setReorderCases] = useState("5")
 
   useEffect(() => {
-    // Simulate API call to fetch product data
     setProduct(getProductData(productId))
   }, [productId])
 
@@ -687,21 +562,10 @@ export function ProductDetail({ productId }: { productId: string }) {
     )
   }
 
-  const totalSales = product.salesHistory.reduce(
-    (sum, day) => sum + day.quantity,
-    0
-  )
-  const averageDailySales = Math.round(totalSales / product.salesHistory.length)
-  const totalRevenue = totalSales * product.price
-  const totalProfit = totalSales * (product.price - product.costPrice)
-
-  // Calculate total units based on case quantity
   const totalUnits = Number.parseInt(reorderCases) * product.caseQuantity
 
-  // Handle case quantity change
   const handleCaseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
-    // Only allow positive integers
     if (/^\d*$/.test(value)) {
       setReorderCases(value)
     }
@@ -792,7 +656,7 @@ export function ProductDetail({ productId }: { productId: string }) {
                   rel="noopener noreferrer"
                   className="font-medium text-primary flex items-center hover:underline"
                 >
-                  Sam's Club <ExternalLink className="h-3 w-3 ml-1" />
+                  Sam&apos;s Club <ExternalLink className="h-3 w-3 ml-1" />
                 </a>
               </div>
               <div className="flex justify-between text-sm">
@@ -839,13 +703,6 @@ export function ProductDetail({ productId }: { productId: string }) {
                     (product.inventory.total / product.reorderPoint) * 100
                   )}
                   className="h-2"
-                  indicatorClassName={
-                    product.reorderStatus === "critical"
-                      ? "bg-red-500"
-                      : product.reorderStatus === "warning"
-                      ? "bg-yellow-500"
-                      : undefined
-                  }
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Reorder Point: {product.reorderPoint}</span>

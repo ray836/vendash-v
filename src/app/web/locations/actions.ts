@@ -1,13 +1,11 @@
 "use server"
 
-import { LocationSite } from "@/core/domain/entities/LocationSite"
 import { db } from "@/infrastructure/database"
 import { locations } from "@/infrastructure/database/schema"
 import { eq } from "drizzle-orm"
 import { DrizzleLocationRepo } from "@/infrastructure/repositories/drizzle-LocationRepo"
 import { LocationUseCase } from "@/core/use-cases/Location/LocationUserCase"
 import { CreateLocationDTO } from "@/core/use-cases/Location/dtos/CreateLocationDTO"
-import { LocationDTO } from "@/core/domain/interfaces/dtos/LocationDTO"
 export async function getLocations(): Promise<string> {
   const drizzleLocationRepo = new DrizzleLocationRepo(db)
   const locationUseCase = new LocationUseCase(drizzleLocationRepo)

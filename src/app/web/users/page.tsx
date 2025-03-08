@@ -24,7 +24,9 @@ import { Plus, Save, Trash2 } from "lucide-react"
 export default function UsersPage() {
   const [users, setUsers] = useState<UserDTO[]>([])
   const [isAddingUser, setIsAddingUser] = useState(false)
-  const [newUser, setNewUser] = useState({
+  const [newUser, setNewUser] = useState<
+    Omit<UserDTO, "id" | "organizationId">
+  >({
     firstName: "",
     lastName: "",
     email: "",
@@ -34,7 +36,11 @@ export default function UsersPage() {
   useEffect(() => {
     const fetchUsers = async () => {
       const users = await getUsers()
-      setUsers(users)
+      const usersWithOrg = users.map((user) => ({
+        ...user,
+        organizationId: user.organizationId || "default",
+      }))
+      setUsers(usersWithOrg)
     }
     fetchUsers()
   }, [])
@@ -43,7 +49,7 @@ export default function UsersPage() {
     // TODO: Implement save functionality
     setIsAddingUser(false)
     console.log("handleSave", newUser)
-    const user = await createUser(newUser)
+    const user = (await createUser(newUser)) as unknown as UserDTO
     console.log("user", user)
     setUsers([...users, user])
     setNewUser({ firstName: "", lastName: "", email: "", role: "user" })

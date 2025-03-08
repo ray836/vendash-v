@@ -661,7 +661,9 @@ export function Settings() {
                       <SelectValue placeholder="Select supplier" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Sam's Club">Sam's Club</SelectItem>
+                      <SelectItem value="Sam's Club">
+                        Sam&apos;s Club
+                      </SelectItem>
                       <SelectItem value="Costco">Costco</SelectItem>
                       <SelectItem value="US Foods">US Foods</SelectItem>
                       <SelectItem value="Sysco">Sysco</SelectItem>
