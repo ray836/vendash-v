@@ -1,0 +1,9 @@
+{
+  "[markdown]": {
+    "editor.formatOnSave": false
+  },
+  "terminal.integrated.defaultProfile.linux": "zsh",
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  "terminal.integrated.defaultProfile.windows": "zsh",
+  "terminal.integrated.shellIntegration.enabled": false
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "vending_machines" ALTER COLUMN "model" SET NOT NULL;

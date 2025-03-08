@@ -1,0 +1,36 @@
+{
+  "rules": [
+    {
+      "pattern": "src/app/(web|api)/.*",
+      "description": "All UI-related components and API routes should reside in `app/`."
+    },
+    {
+      "pattern": "src/core/domain/entities/.*",
+      "description": "Entities represent core domain models with business logic and should not depend on external frameworks."
+    },
+    {
+      "pattern": "src/core/domain/value-objects/.*",
+      "description": "Value Objects represent immutable domain concepts."
+    },
+    {
+      "pattern": "src/core/domain/interfaces/.*",
+      "description": "Interfaces define contracts that must be implemented in the infrastructure layer."
+    },
+    {
+      "pattern": "src/core/use-cases/.*",
+      "description": "Use cases contain business logic and should only depend on domain entities and repositories."
+    },
+    {
+      "pattern": "src/infrastructure/repositories/.*",
+      "description": "Repositories provide concrete implementations of domain interfaces using external data sources."
+    },
+    {
+      "pattern": "src/infrastructure/database/.*",
+      "description": "Database schemas, migrations, and connection logic reside here."
+    },
+    {
+      "pattern": ".*",
+      "description": "Follow Clean Architecture principles: Separate concerns by domain, use cases, infrastructure, and UI."
+    }
+  ]
+}
