@@ -808,6 +808,15 @@ export function Dashboard() {
                 <span>Inventory</span>
               </Button>
             </Link>
+            <Link href="/orders">
+              <Button
+                variant="outline"
+                className="w-full h-auto py-4 flex flex-col items-center justify-center gap-2"
+              >
+                <ShoppingCart className="h-6 w-6" />
+                <span>Orders</span>
+              </Button>
+            </Link>
             <Link href="/reports">
               <Button
                 variant="outline"

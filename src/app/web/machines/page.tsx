@@ -175,7 +175,7 @@ export default function VendingMachineDashboard() {
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Vending Machines</h1>
-        <Link href="/web/machine/new">
+        <Link href="/web/machines/new">
           <Button>Add Machine</Button>
         </Link>
       </div>

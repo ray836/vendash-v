@@ -39,7 +39,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-
+import { ThemeToggle } from "./theme-toggle"
 export function Settings() {
   const [accountForm, setAccountForm] = useState({
     name: "John Doe",
@@ -416,6 +416,7 @@ export function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <ThemeToggle />
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Theme</Label>

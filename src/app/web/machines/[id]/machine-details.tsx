@@ -83,7 +83,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   )
 
   const handleSetupClick = () => {
-    router.push(`/web/machine/${id}/setup`)
+    router.push(`/web/machines/${id}/setup`)
   }
 
   const formatDate = (dateString: string) => {

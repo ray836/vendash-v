@@ -3,7 +3,14 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BarChart3, Package, Settings, Truck, Menu } from "lucide-react"
+import {
+  BarChart3,
+  Package,
+  Settings,
+  Truck,
+  Menu,
+  ShoppingCart,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -24,6 +31,11 @@ const navItems = [
     title: "Products",
     href: "/web/products",
     icon: Package,
+  },
+  {
+    title: "Orders",
+    href: "/web/orders",
+    icon: ShoppingCart,
   },
   {
     title: "Settings",
