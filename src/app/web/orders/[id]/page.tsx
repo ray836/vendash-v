@@ -24,14 +24,9 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { OrderItemDetail } from "./order-item-detail"
 
-interface OrderDetailsPageProps {
-  params: {
-    id: string
-  }
-}
-
-// This would typically come from an API or database based on the order ID
-const getOrderDetails = (id: string) => {
+// Make the function async
+const getOrderDetails = async (id: string) => {
+  // This would typically come from an API or database based on the order ID
   return {
     id: id,
     orderNumber: "ORD-2023-001",
@@ -89,8 +84,17 @@ const getOrderDetails = (id: string) => {
   }
 }
 
-export default function OrderDetailsPage({ params }: OrderDetailsPageProps) {
-  const order = getOrderDetails(params.id)
+interface PageProps {
+  params: Promise<{
+    id: string
+  }> & {
+    id: string
+  }
+}
+
+// Make the page component async
+export default async function OrderDetailsPage({ params }: PageProps) {
+  const order = await getOrderDetails(params.id)
 
   return (
     <div className="container mx-auto py-6 space-y-8">
