@@ -10,6 +10,7 @@ import {
   Truck,
   Menu,
   ShoppingCart,
+  DollarSign,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -36,6 +37,11 @@ const navItems = [
     title: "Orders",
     href: "/web/orders",
     icon: ShoppingCart,
+  },
+  {
+    title: "Sales",
+    href: "/web/sales",
+    icon: DollarSign,
   },
   {
     title: "Settings",

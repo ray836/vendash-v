@@ -1,3 +1,4 @@
+"use client"
 import { ProductsInventory } from "./products-inventory"
 
 export default function ProductsPage() {

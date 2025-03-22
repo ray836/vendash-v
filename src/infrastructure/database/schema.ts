@@ -5,7 +5,9 @@ import {
   text,
   timestamp,
   varchar,
+  decimal,
 } from "drizzle-orm/pg-core"
+import { relations } from "drizzle-orm"
 
 export const vendingMachines = pgTable("vending_machines", {
   id: text("id").primaryKey(),
@@ -45,6 +47,80 @@ export const users = pgTable("users", {
     .notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
+
+export const products = pgTable("products", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  recommendedPrice: decimal("recommended_price", {
+    precision: 10,
+    scale: 2,
+  }).notNull(),
+  category: text("category").notNull(),
+  image: text("image").notNull(),
+  vendorLink: text("vendor_link").notNull(),
+  caseCost: decimal("case_cost", { precision: 10, scale: 2 }).notNull(),
+  caseSize: text("case_size").notNull(),
+  shippingAvailable: boolean("shipping_available").notNull(),
+  shippingTimeInDays: integer("shipping_time_in_days").notNull(),
+  organizationId: text("organization_id")
+    .references(() => organizations.id)
+    .notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
+// TODO: check if this schema will work
+export const inventory = pgTable("inventory", {
+  productId: text("product_id")
+    .references(() => products.id)
+    .primaryKey()
+    .notNull(),
+  storage: integer("storage").notNull(),
+  machines: integer("machines").notNull(),
+  organizationId: text("organization_id")
+    .references(() => organizations.id)
+    .notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
+export const transactions = pgTable("transactions", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .references(() => organizations.id)
+    .notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  transactionType: text("transaction_type").notNull(),
+  total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+  last4CardDigits: text("last_4_card_digits").notNull(),
+})
+
+export const transactionItems = pgTable("transaction_items", {
+  id: text("id").primaryKey(),
+  transactionId: text("transaction_id")
+    .references(() => transactions.id)
+    .notNull(),
+  productId: text("product_id")
+    .references(() => products.id)
+    .notNull(),
+  quantity: integer("quantity").notNull(),
+  salePrice: decimal("sale_price", { precision: 10, scale: 2 }).notNull(),
+})
+
+// Define the relations
+export const transactionsRelations = relations(transactions, ({ many }) => ({
+  transactionItems: many(transactionItems),
+}))
+
+export const transactionItemsRelations = relations(
+  transactionItems,
+  ({ one }) => ({
+    transaction: one(transactions, {
+      fields: [transactionItems.transactionId],
+      references: [transactions.id],
+    }),
+  })
+)
 
 export const locations = pgTable("locations", {
   id: text("id").primaryKey(),

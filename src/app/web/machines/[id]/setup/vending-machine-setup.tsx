@@ -129,20 +129,22 @@ const products = {
 
 interface Slot {
   id: string
-  row: number
+  row: string
   column: number
   productId: string | null
   capacity: number
   price: number | null
+  cardReaderSlotId?: string
 }
 
 function createInitialSlots(rows: number, columns: number): Slot[] {
   const slots: Slot[] = []
   for (let row = 0; row < rows; row++) {
+    const rowLetter = String.fromCharCode(65 + row)
     for (let col = 0; col < columns; col++) {
       slots.push({
-        id: `${row}-${col}`,
-        row,
+        id: `${rowLetter}-${col}`,
+        row: rowLetter,
         column: col,
         productId: null,
         capacity: 10,
@@ -388,7 +390,7 @@ function SlotGrid({
                 </>
               ) : (
                 <span className="text-sm text-muted-foreground">
-                  {slot.row + 1}-{slot.column + 1}
+                  {slot.row}-{slot.column + 1}
                 </span>
               )}
             </div>
@@ -414,7 +416,7 @@ function SlotSettings({
     <div className="space-y-4">
       <div>
         <h3 className="font-medium mb-2">
-          Slot {slot.row + 1}-{slot.column + 1}
+          Slot {slot.row}-{slot.column + 1}
         </h3>
         {product && (
           <p className="text-sm text-muted-foreground mb-4">
@@ -446,6 +448,16 @@ function SlotSettings({
           type="number"
           value={slot.capacity}
           onChange={(e) => onUpdate({ capacity: Number(e.target.value) })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="cardReaderSlotId">Card Reader Slot ID</Label>
+        <Input
+          id="cardReaderSlotId"
+          value={slot.cardReaderSlotId || ""}
+          onChange={(e) => onUpdate({ cardReaderSlotId: e.target.value })}
+          placeholder="Enter card reader slot ID"
         />
       </div>
 
@@ -549,12 +561,12 @@ export function VendingMachineSetup({ id }: VendingMachineSetupProps) {
     if (rows <= 1) return
 
     // Remove the last row
-    const newSlots = slots.filter((slot) => slot.row < rows - 1)
+    const newSlots = slots.filter((slot) => slot.row.charCodeAt(0) < rows - 1)
     setRows(rows - 1)
     setSlots(newSlots)
 
     // Clear active slot if it was in the removed row
-    if (activeSlot && activeSlot.row === rows - 1) {
+    if (activeSlot && activeSlot.row.charCodeAt(0) === rows - 1) {
       setActiveSlot(null)
     }
   }
@@ -567,7 +579,7 @@ export function VendingMachineSetup({ id }: VendingMachineSetupProps) {
     for (let row = 0; row < rows; row++) {
       newSlots.push({
         id: `${row}-${newCol}`,
-        row,
+        row: String.fromCharCode(65 + row),
         column: newCol,
         productId: null,
         capacity: 10,

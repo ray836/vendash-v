@@ -3,7 +3,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   ArrowDown,
   ArrowUp,
@@ -49,218 +49,12 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
-
-// Add these type definitions at the top of the file
-interface ProductInventory {
-  id: string
-  name: string
-  image: string
-  category: string
-  price: number
-  inventory: {
-    total: number
-    storage: number
-    machines: number
-  }
-  sales: {
-    daily: number
-    weekly: number
-    trend: "up" | "down" | "stable"
-    velocity: "high" | "medium" | "low"
-    velocityRank: number
-  }
-  reorderPoint: number
-  reorderStatus: "ok" | "warning" | "critical"
-  daysUntilStockout: number
-}
-
-// Sample product inventory data
-const productInventory: ProductInventory[] = [
-  {
-    id: "1",
-    name: "Coca-Cola",
-    image:
-      "https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=300&h=300&fit=crop",
-    category: "drink",
-    price: 2.5,
-    inventory: {
-      total: 240,
-      storage: 180,
-      machines: 60,
-    },
-    sales: {
-      daily: 24,
-      weekly: 168,
-      trend: "up", // up, down, stable
-      velocity: "high", // high, medium, low
-      velocityRank: 3, // Numeric rank for sorting (higher = faster selling)
-    },
-    reorderPoint: 100,
-    reorderStatus: "ok", // ok, warning, critical
-    daysUntilStockout: 10,
-  },
-  {
-    id: "2",
-    name: "Diet Coke",
-    image:
-      "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=300&h=300&fit=crop",
-    category: "drink",
-    price: 2.5,
-    inventory: {
-      total: 180,
-      storage: 120,
-      machines: 60,
-    },
-    sales: {
-      daily: 18,
-      weekly: 126,
-      trend: "stable",
-      velocity: "medium",
-      velocityRank: 2,
-    },
-    reorderPoint: 100,
-    reorderStatus: "ok",
-    daysUntilStockout: 10,
-  },
-  {
-    id: "3",
-    name: "Sprite",
-    image:
-      "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?w=300&h=300&fit=crop",
-    category: "drink",
-    price: 2.5,
-    inventory: {
-      total: 120,
-      storage: 60,
-      machines: 60,
-    },
-    sales: {
-      daily: 15,
-      weekly: 105,
-      trend: "up",
-      velocity: "medium",
-      velocityRank: 2,
-    },
-    reorderPoint: 100,
-    reorderStatus: "warning",
-    daysUntilStockout: 8,
-  },
-  {
-    id: "4",
-    name: "Doritos",
-    image:
-      "https://images.unsplash.com/photo-1600952841320-db92ec4047ca?w=300&h=300&fit=crop",
-    category: "snack",
-    price: 1.75,
-    inventory: {
-      total: 85,
-      storage: 25,
-      machines: 60,
-    },
-    sales: {
-      daily: 22,
-      weekly: 154,
-      trend: "up",
-      velocity: "high",
-      velocityRank: 3,
-    },
-    reorderPoint: 80,
-    reorderStatus: "critical",
-    daysUntilStockout: 3,
-  },
-  {
-    id: "5",
-    name: "Lays Classic",
-    image:
-      "https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=300&h=300&fit=crop",
-    category: "snack",
-    price: 1.75,
-    inventory: {
-      total: 150,
-      storage: 90,
-      machines: 60,
-    },
-    sales: {
-      daily: 20,
-      weekly: 140,
-      trend: "stable",
-      velocity: "medium",
-      velocityRank: 2,
-    },
-    reorderPoint: 80,
-    reorderStatus: "ok",
-    daysUntilStockout: 7,
-  },
-  {
-    id: "6",
-    name: "Snickers",
-    image:
-      "https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?w=300&h=300&fit=crop",
-    category: "snack",
-    price: 1.5,
-    inventory: {
-      total: 60,
-      storage: 0,
-      machines: 60,
-    },
-    sales: {
-      daily: 25,
-      weekly: 175,
-      trend: "up",
-      velocity: "high",
-      velocityRank: 3,
-    },
-    reorderPoint: 80,
-    reorderStatus: "critical",
-    daysUntilStockout: 2,
-  },
-  {
-    id: "7",
-    name: "M&Ms",
-    image:
-      "https://images.unsplash.com/photo-1581798459219-318e76aecc7b?w=300&h=300&fit=crop",
-    category: "snack",
-    price: 1.5,
-    inventory: {
-      total: 200,
-      storage: 140,
-      machines: 60,
-    },
-    sales: {
-      daily: 15,
-      weekly: 105,
-      trend: "down",
-      velocity: "low",
-      velocityRank: 1,
-    },
-    reorderPoint: 80,
-    reorderStatus: "ok",
-    daysUntilStockout: 13,
-  },
-  {
-    id: "8",
-    name: "Twix",
-    image:
-      "https://images.unsplash.com/photo-1527904324834-3bda86da6771?w=300&h=300&fit=crop",
-    category: "snack",
-    price: 1.5,
-    inventory: {
-      total: 90,
-      storage: 30,
-      machines: 60,
-    },
-    sales: {
-      daily: 12,
-      weekly: 84,
-      trend: "stable",
-      velocity: "medium",
-      velocityRank: 2,
-    },
-    reorderPoint: 80,
-    reorderStatus: "warning",
-    daysUntilStockout: 7,
-  },
-]
+import { getOrgProductDataMetrics, getProducts } from "./actions"
+import { Product } from "@/core/domain/entities/Product"
+import { ProductDTO } from "@/core/domain/interfaces/dtos/ProductDTO"
+import { ProductInventory, mockProductInventory } from "./mock-data"
+import { ProductDataMetricsDTO } from "@/core/domain/DTOs/productDataMetricsDTOs"
+import { PublicInventoryDTO } from "@/core/domain/DTOs/inventoryDTOs"
 
 function InventoryStatusBadge({ status }: { status: string }) {
   if (status === "ok") {
@@ -351,12 +145,23 @@ function SortableTableHeader({
   )
 }
 
-function ProductCard({ product }: { product: ProductInventory }) {
+function ProductCard({
+  productDataMetrics,
+}: {
+  productDataMetrics: ProductDataMetricsDTO
+}) {
   const storagePercentage =
-    Math.round((product.inventory.storage / product.inventory.total) * 100) || 0
+    Math.round(
+      (productDataMetrics.inventory.storage /
+        productDataMetrics.inventory.total) *
+        100
+    ) || 0
   const machinesPercentage =
-    Math.round((product.inventory.machines / product.inventory.total) * 100) ||
-    0
+    Math.round(
+      (productDataMetrics.inventory.machines /
+        productDataMetrics.inventory.total) *
+        100
+    ) || 0
 
   return (
     <Card>
@@ -365,39 +170,48 @@ function ProductCard({ product }: { product: ProductInventory }) {
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={product.image || "/placeholder.svg"}
-              alt={product.name}
+              src={productDataMetrics.product.image || "/placeholder.svg"}
+              alt={productDataMetrics.product.name}
               className="w-14 h-14 rounded-md object-cover"
             />
             <div>
-              <Link href={`products/${product.id}`} className="hover:underline">
-                <CardTitle className="text-base">{product.name}</CardTitle>
+              <Link
+                href={`products/${productDataMetrics.product.id}`}
+                className="hover:underline"
+              >
+                <CardTitle className="text-base">
+                  {productDataMetrics.product.name}
+                </CardTitle>
               </Link>
               <p className="text-xs text-muted-foreground capitalize">
-                {product.category}
+                {productDataMetrics.product.category}
               </p>
             </div>
           </div>
-          <InventoryStatusBadge status={product.reorderStatus} />
+          <InventoryStatusBadge
+            status={productDataMetrics.shouldOrder ? "critical" : "ok"}
+          />
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span>Total Inventory</span>
-            <span className="font-medium">{product.inventory.total} units</span>
+            <span className="font-medium">
+              {productDataMetrics.inventory.total} units
+            </span>
           </div>
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Storage</span>
-              <span>{product.inventory.storage} units</span>
+              <span>{productDataMetrics.inventory.storage} units</span>
             </div>
             <Progress value={storagePercentage} className="h-1" />
           </div>
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>In Machines</span>
-              <span>{product.inventory.machines} units</span>
+              <span>{productDataMetrics.inventory.machines} units</span>
             </div>
             <Progress value={machinesPercentage} className="h-1" />
           </div>
@@ -407,15 +221,21 @@ function ProductCard({ product }: { product: ProductInventory }) {
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Daily Sales</span>
             <div className="flex items-center gap-1">
-              <SalesTrendIndicator trend={product.sales.trend} />
-              <span className="text-sm">{product.sales.daily}/day</span>
+              <SalesTrendIndicator
+                trend={productDataMetrics.trend > 1 ? "up" : "down"}
+              />
+              <span className="text-sm">
+                {productDataMetrics.averageDailySales}/day
+              </span>
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
             <span className="text-xs text-muted-foreground">
               Sales Velocity
             </span>
-            <SalesVelocityBadge velocity={product.sales.velocity} />
+            <SalesVelocityBadge
+              velocity={productDataMetrics.salesVelocity > 1 ? "high" : "low"}
+            />
           </div>
         </div>
 
@@ -424,28 +244,28 @@ function ProductCard({ product }: { product: ProductInventory }) {
             <span className="text-muted-foreground mr-1">Days left:</span>
             <span
               className={
-                product.daysUntilStockout <= 3
+                productDataMetrics.daysToSellOut <= 3
                   ? "text-red-600 font-medium"
-                  : product.daysUntilStockout <= 7
+                  : productDataMetrics.daysToSellOut <= 7
                   ? "text-yellow-600"
                   : ""
               }
             >
-              {product.daysUntilStockout}
+              {productDataMetrics.daysToSellOut}
             </span>
           </div>
           <div className="flex gap-2">
-            <Link href={`products/${product.id}`}>
+            <Link href={`products/${productDataMetrics.product.id}`}>
               <Button size="sm" variant="outline">
                 Details
               </Button>
             </Link>
             <Button
               size="sm"
-              variant={product.reorderStatus === "ok" ? "outline" : "default"}
+              variant={productDataMetrics.shouldOrder ? "outline" : "default"}
             >
               <PlusCircle className="h-4 w-4 mr-2" />
-              Reorder
+              Next Order
             </Button>
           </div>
         </div>
@@ -463,12 +283,18 @@ export function ProductsInventory() {
     key: "daysUntilStockout",
     direction: "asc",
   })
+  const [products, setProducts] = useState<ProductDTO[]>([])
+  const [productDataMetrics, setProductDataMetrics] = useState<
+    ProductDataMetricsDTO[]
+  >([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // Update the NestedValue type and add a type guard
   type NestedValue = string | number | null | Record<string, unknown>
 
   const getNestedValue = (
-    obj: ProductInventory,
+    obj: ProductDataMetricsDTO,
     path: string
   ): string | number | null => {
     const result = path.split(".").reduce<NestedValue>((prev, curr) => {
@@ -496,23 +322,28 @@ export function ProductsInventory() {
   }
 
   // Filter products based on search query and filters
-  const filteredProducts = productInventory
-    .filter((product) => {
+  const filteredProducts = productDataMetrics
+    .filter((productDataMetrics) => {
       // Search filter
       if (
         searchQuery &&
-        !product.name.toLowerCase().includes(searchQuery.toLowerCase())
+        !productDataMetrics.product.name
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())
       ) {
         return false
       }
 
       // Category filter
-      if (categoryFilter !== "all" && product.category !== categoryFilter) {
+      if (
+        categoryFilter !== "all" &&
+        productDataMetrics.product.category !== categoryFilter
+      ) {
         return false
       }
 
       // Status filter
-      if (statusFilter !== "all" && product.reorderStatus !== statusFilter) {
+      if (statusFilter !== "all" && productDataMetrics.shouldOrder) {
         return false
       }
 
@@ -540,12 +371,47 @@ export function ProductsInventory() {
     })
 
   // Get counts for filter badges
-  const criticalCount = productInventory.filter(
+  const criticalCount = mockProductInventory.filter(
     (p) => p.reorderStatus === "critical"
   ).length
-  const warningCount = productInventory.filter(
+  const warningCount = mockProductInventory.filter(
     (p) => p.reorderStatus === "warning"
   ).length
+
+  useEffect(() => {
+    async function fetchProducts() {
+      try {
+        console.log("fetching products...")
+        setError(null)
+        const fetchedProducts = await getProducts()
+        setProducts(JSON.parse(fetchedProducts))
+        console.log("fetched products", fetchedProducts)
+      } catch (error) {
+        setError("Failed to load products")
+        console.error("Failed to fetch products:", error)
+      } finally {
+      }
+    }
+    console.log("products", products)
+    console.log("testtttttt")
+
+    fetchProducts()
+
+    async function fetchProductDataMetrics() {
+      const productDataMetrics = await getOrgProductDataMetrics("1")
+      console.log("productDataMetrics", productDataMetrics)
+      setProductDataMetrics(JSON.parse(productDataMetrics))
+      setIsLoading(false)
+    }
+    fetchProductDataMetrics()
+  }, [])
+
+  if (error) {
+    return <div>Error: {error}</div>
+  }
+
+  // Use mockProductInventory for now while we transition to real data
+  const displayData = isLoading ? mockProductInventory : productDataMetrics
 
   return (
     <div className="space-y-6">
@@ -666,7 +532,7 @@ export function ProductsInventory() {
 
           {filteredProducts.length > 0 && (
             <p className="text-sm text-muted-foreground">
-              Showing {filteredProducts.length} of {productInventory.length}{" "}
+              Showing {filteredProducts.length} of {mockProductInventory.length}{" "}
               products
             </p>
           )}
@@ -759,44 +625,49 @@ export function ProductsInventory() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredProducts.map((product) => (
-                      <TableRow key={product.id}>
+                    filteredProducts.map((productDataMetrics) => (
+                      <TableRow key={productDataMetrics.product.id}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={product.image || "/placeholder.svg"}
-                              alt={product.name}
+                              src={
+                                productDataMetrics.product.image ||
+                                "/placeholder.svg"
+                              }
+                              alt={productDataMetrics.product.name}
                               className="w-12 h-12 rounded-md object-cover"
                             />
                             <Link
-                              href={`products/${product.id}`}
+                              href={`products/${productDataMetrics.product.id}`}
                               className="font-medium hover:underline"
                             >
-                              {product.name}
+                              {productDataMetrics.product.name}
                             </Link>
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell capitalize">
-                          {product.category}
+                          {productDataMetrics.product.category}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span>{product.inventory.total}</span>
+                            <span>{productDataMetrics.inventory.total}</span>
                             <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
                               <div
                                 className={`h-full ${
-                                  product.reorderStatus === "critical"
+                                  productDataMetrics.shouldOrder
                                     ? "bg-red-500"
-                                    : product.reorderStatus === "warning"
+                                    : productDataMetrics.isOnNextOrder
                                     ? "bg-yellow-500"
                                     : "bg-green-500"
                                 }`}
                                 style={{
                                   width: `${Math.min(
                                     100,
-                                    (product.inventory.total /
-                                      product.reorderPoint) *
+                                    ((productDataMetrics.inventory.total +
+                                      0.5) /
+                                      (productDataMetrics.inventory.total +
+                                        5)) *
                                       100
                                   )}%`,
                                 }}
@@ -805,43 +676,57 @@ export function ProductsInventory() {
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          {product.inventory.storage}
+                          {productDataMetrics.inventory.storage}
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          {product.inventory.machines}
+                          {productDataMetrics.inventory.machines}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            <SalesTrendIndicator trend={product.sales.trend} />
-                            <span>{product.sales.daily}/day</span>
+                            <SalesTrendIndicator
+                              trend={
+                                productDataMetrics.trend > 1 ? "up" : "down"
+                              }
+                            />
+                            <span>
+                              {productDataMetrics.averageDailySales}/day
+                            </span>
                           </div>
                         </TableCell>
                         <TableCell>
                           <SalesVelocityBadge
-                            velocity={product.sales.velocity}
+                            velocity={
+                              productDataMetrics.salesVelocity > 1
+                                ? "high"
+                                : "low"
+                            }
                           />
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <span
                             className={
-                              product.daysUntilStockout <= 3
+                              productDataMetrics.daysToSellOut <= 3
                                 ? "text-red-600 font-medium"
-                                : product.daysUntilStockout <= 7
+                                : productDataMetrics.daysToSellOut <= 7
                                 ? "text-yellow-600"
                                 : ""
                             }
                           >
-                            {product.daysUntilStockout} days
+                            {productDataMetrics.daysToSellOut} days
                           </span>
                         </TableCell>
                         <TableCell>
                           <InventoryStatusBadge
-                            status={product.reorderStatus}
+                            status={
+                              productDataMetrics.shouldOrder ? "critical" : "ok"
+                            }
                           />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Link href={`products/${product.id}`}>
+                            <Link
+                              href={`products/${productDataMetrics.product.id}`}
+                            >
                               <Button size="sm" variant="outline">
                                 Details
                               </Button>
@@ -849,13 +734,13 @@ export function ProductsInventory() {
                             <Button
                               size="sm"
                               variant={
-                                product.reorderStatus === "ok"
+                                productDataMetrics.shouldOrder
                                   ? "outline"
                                   : "default"
                               }
                             >
                               <PlusCircle className="h-4 w-4 mr-2" />
-                              Reorder
+                              Next Order
                             </Button>
                           </div>
                         </TableCell>
@@ -892,8 +777,11 @@ export function ProductsInventory() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
+              {filteredProducts.map((productDataMetrics) => (
+                <ProductCard
+                  key={productDataMetrics.product.id}
+                  productDataMetrics={productDataMetrics}
+                />
               ))}
             </div>
           )}
