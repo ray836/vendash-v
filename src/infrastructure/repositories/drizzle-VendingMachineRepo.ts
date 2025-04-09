@@ -1,22 +1,23 @@
 import { VendingMachineRepository } from "@/core/domain/interfaces/VendingMachineRepository"
 import {
+  MachineStatus,
   MachineType,
   VendingMachine,
 } from "@/core/domain/entities/VendingMachine"
 import { db } from "../database"
 import { vendingMachines } from "../database/schema"
 import { eq } from "drizzle-orm"
-import { VendingMachineDTO } from "../../core/domain/interfaces/dtos/VendingMachineDTO"
-import { CreateVendingMachineDTO } from "@/core/use-cases/VendingMachine/dtos/CreateVendingMachineDTO"
 import { randomUUID } from "node:crypto"
-
+import {
+  PublicVendingMachineDTO,
+  UpdateVendingMachineRequestDTO,
+} from "@/core/domain/DTOs/vendingMachineDTOs"
+import { BaseVendingMachineDTOToPublicVendingMachineDTO } from "@/core/domain/DTOs/vendingMachineDTOs"
 export class DrizzleVendingMachineRepository
   implements VendingMachineRepository
 {
   constructor(private readonly database: typeof db) {}
-  async getVendingMachines(
-    organizationId: string
-  ): Promise<VendingMachineDTO[]> {
+  async getVendingMachines(organizationId: string): Promise<VendingMachine[]> {
     const result = await this.database
       .select()
       .from(vendingMachines)
@@ -24,47 +25,58 @@ export class DrizzleVendingMachineRepository
 
     return result.map(
       (machine) =>
-        new VendingMachineDTO(
-          machine.id,
-          machine.type,
-          machine.locationId,
-          machine.organizationId,
-          machine.notes ?? undefined,
-          machine.model ?? undefined
-        )
+        new VendingMachine({
+          id: machine.id,
+          type: machine.type as MachineType,
+          locationId: machine.locationId,
+          organizationId: machine.organizationId,
+          notes: machine.notes ?? "",
+          model: machine.model ?? "",
+          createdAt: machine.createdAt.toISOString(),
+          updatedAt: machine.updatedAt.toISOString(),
+          createdBy: machine.createdBy,
+          updatedBy: machine.updatedBy,
+          cardReaderId: machine.cardReaderId ?? "",
+          status: machine.status as MachineStatus,
+        })
     )
   }
 
-  async createVendingMachine(
-    machine: CreateVendingMachineDTO
-  ): Promise<VendingMachine> {
+  async createVendingMachine(machine: VendingMachine): Promise<VendingMachine> {
     const result = await this.database
       .insert(vendingMachines)
       .values({
-        id: randomUUID(),
-        type: machine.type,
-        locationId: machine.locationId,
-        notes: machine.notes,
-        model: machine.model,
-        organizationId: machine.organizationId,
-        createdBy: machine.creator,
-        updatedBy: machine.creator,
+        id: machine.props.id || randomUUID(),
+        type: machine.props.type,
+        locationId: machine.props.locationId,
+        notes: machine.props.notes,
+        model: machine.props.model,
+        organizationId: machine.props.organizationId,
+        createdBy: machine.props.createdBy,
+        updatedBy: machine.props.updatedBy,
         createdAt: new Date(),
         updatedAt: new Date(),
+        status: machine.props.status,
       })
       .returning()
     const [newMachine] = result
-    return new VendingMachine(
-      newMachine.id as MachineType,
-      newMachine.type,
-      newMachine.locationId,
-      newMachine.organizationId,
-      newMachine.notes ?? "",
-      newMachine.model
-    )
+    return new VendingMachine({
+      id: newMachine.id,
+      type: newMachine.type as MachineType,
+      locationId: newMachine.locationId,
+      organizationId: newMachine.organizationId,
+      notes: newMachine.notes ?? "",
+      model: newMachine.model ?? "",
+      createdAt: newMachine.createdAt.toISOString(),
+      updatedAt: newMachine.updatedAt.toISOString(),
+      createdBy: newMachine.createdBy,
+      updatedBy: newMachine.updatedBy,
+      cardReaderId: newMachine.cardReaderId ?? "",
+      status: newMachine.status as MachineStatus,
+    })
   }
 
-  async getVendingMachine(id: string): Promise<VendingMachineDTO | null> {
+  async getVendingMachine(id: string): Promise<VendingMachine | null> {
     const result = await this.database
       .select()
       .from(vendingMachines)
@@ -72,52 +84,75 @@ export class DrizzleVendingMachineRepository
       .limit(1)
 
     if (!result.length) return null
-    const machine = result[0]
-    return new VendingMachineDTO(
-      machine.id,
-      machine.type,
-      machine.locationId,
-      machine.organizationId,
-      machine.notes ?? undefined,
-      machine.model ?? undefined
-    )
+    const dbMachine = result[0]
+
+    // First transform to BaseVendingMachineDTO with correct types
+    const baseDTO = {
+      id: dbMachine.id,
+      type: dbMachine.type as MachineType,
+      locationId: dbMachine.locationId,
+      organizationId: dbMachine.organizationId,
+      notes: dbMachine.notes ?? "",
+      model: dbMachine.model ?? "",
+      createdAt: dbMachine.createdAt.toISOString(),
+      updatedAt: dbMachine.updatedAt.toISOString(),
+      createdBy: dbMachine.createdBy,
+      updatedBy: dbMachine.updatedBy,
+      cardReaderId: dbMachine.cardReaderId ?? "",
+      status: dbMachine.status as MachineStatus,
+    }
+
+    return new VendingMachine({
+      id: baseDTO.id,
+      type: baseDTO.type,
+      locationId: baseDTO.locationId,
+      organizationId: baseDTO.organizationId,
+      notes: baseDTO.notes,
+      model: baseDTO.model,
+      createdAt: baseDTO.createdAt,
+      updatedAt: baseDTO.updatedAt,
+      createdBy: baseDTO.createdBy,
+      updatedBy: baseDTO.updatedBy,
+      cardReaderId: baseDTO.cardReaderId,
+      status: baseDTO.status,
+    })
   }
 
   async updateVendingMachine(
-    machine: VendingMachine,
-    userId: string
-  ): Promise<VendingMachineDTO> {
+    updates: UpdateVendingMachineRequestDTO,
+    userId: string,
+    machineId: string
+  ): Promise<VendingMachine> {
     const result = (
       await this.database
         .update(vendingMachines)
         .set({
-          type: machine.type,
-          locationId: machine.locationId,
-          notes: machine.notes,
-          model: machine.model,
+          ...updates,
           updatedBy: userId,
           updatedAt: new Date(),
         })
-        .where(eq(vendingMachines.id, machine.id))
-        .returning({
-          id: vendingMachines.id,
-          type: vendingMachines.type,
-          locationId: vendingMachines.locationId,
-          organizationId: vendingMachines.organizationId,
-          createdBy: vendingMachines.createdBy,
-          createdAt: vendingMachines.createdAt,
-          notes: vendingMachines.notes,
-          model: vendingMachines.model,
-        })
+        .where(eq(vendingMachines.id, machineId))
+        .returning()
     )[0]
-    return new VendingMachineDTO(
-      result.id,
-      result.type,
-      result.locationId,
-      result.organizationId,
-      result.notes ?? undefined,
-      result.model ?? undefined
-    )
+
+    if (!result) {
+      throw new Error("Failed to update vending machine")
+    }
+
+    return new VendingMachine({
+      id: result.id,
+      type: result.type as MachineType,
+      locationId: result.locationId,
+      organizationId: result.organizationId,
+      notes: result.notes ?? "",
+      model: result.model ?? "",
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+      createdBy: result.createdBy,
+      updatedBy: result.updatedBy,
+      cardReaderId: result.cardReaderId ?? "",
+      status: result.status as MachineStatus,
+    })
   }
 
   async deleteVendingMachine(id: string): Promise<void> {

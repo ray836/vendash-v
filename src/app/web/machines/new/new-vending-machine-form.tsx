@@ -5,6 +5,9 @@ import * as z from "zod"
 import { ArrowLeft, Plus } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
+import { createMachine } from "../actions"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -39,6 +42,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { MachineType } from "@/core/domain/entities/VendingMachine"
 
 // Sample initial locations - in a real app, this would come from your backend
 const initialLocations: Location[] = [
@@ -63,14 +67,17 @@ const formSchema = z.object({
   machineId: z.string().min(2, {
     message: "Machine ID must be at least 2 characters.",
   }),
+  model: z.string().min(2, {
+    message: "Machine model is required.",
+  }),
   locationId: z.string({
     required_error: "Please select a location.",
   }),
   specificLocation: z.string().min(2, {
     message: "Specific location description is required.",
   }),
-  model: z.string({
-    required_error: "Please select a machine model.",
+  type: z.string({
+    required_error: "Please select a machine type.",
   }),
   status: z.string({
     required_error: "Please select an initial status.",
@@ -168,12 +175,15 @@ function AddLocationDialog({
 }
 
 export function NewVendingMachineForm() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [locations, setLocations] = useState(initialLocations)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       machineId: "",
+      model: "",
       locationId: "",
       specificLocation: "",
       notes: "",
@@ -184,11 +194,34 @@ export function NewVendingMachineForm() {
     setLocations([...locations, newLocation])
   }
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // In a real application, you would send this data to your backend
-    console.log(values)
-    alert("Vending machine created successfully!")
-    form.reset()
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    try {
+      const result = await createMachine({
+        id: values.machineId,
+        type: values.type as MachineType,
+        locationId: values.locationId,
+        model: values.model,
+        notes: values.notes || "",
+        organizationId: "1",
+        cardReaderId: "1",
+      })
+      console.log(result)
+
+      toast({
+        title: "Success",
+        description: "Vending machine created successfully",
+      })
+
+      // Redirect to the machines list or the new machine's details
+      router.push("/web/machines")
+    } catch (error) {
+      console.error("Failed to create machine:", error)
+      toast({
+        title: "Error",
+        description: "Failed to create vending machine",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
@@ -235,22 +268,36 @@ export function NewVendingMachineForm() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Machine Model</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. VX2000" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The model number or name of the machine
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Machine Type</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         defaultValue={field.value}
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select model" />
+                            <SelectValue placeholder="Select type" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="standard">
-                            Standard Vending
-                          </SelectItem>
-                          <SelectItem value="snack">Snack Machine</SelectItem>
-                          <SelectItem value="drink">Drink Machine</SelectItem>
-                          <SelectItem value="combo">Combo Machine</SelectItem>
+                          <SelectItem value="SNACK">Snack Machine</SelectItem>
+                          <SelectItem value="DRINK">Drink Machine</SelectItem>
+                          <SelectItem value="COMBO">Combo Machine</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

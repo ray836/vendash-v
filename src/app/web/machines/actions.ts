@@ -2,27 +2,36 @@
 
 import { DrizzleVendingMachineRepository } from "@/infrastructure/repositories/drizzle-VendingMachineRepo"
 import { VendingMachineUseCase } from "@/core/use-cases/VendingMachine/VendingMachineUseCase"
-import { CreateVendingMachineDTO } from "@/core/use-cases/VendingMachine/dtos/CreateVendingMachineDTO"
 import { db } from "@/infrastructure/database"
+import { CreateVendingMachineRequestDTO } from "@/core/domain/DTOs/vendingMachineDTOs"
 const organizationId = "1"
 
-export async function createMachine(machine: CreateVendingMachineDTO) {
+export async function createMachine(machine: CreateVendingMachineRequestDTO) {
   const drizzleVendingMachineRepository = new DrizzleVendingMachineRepository(
     db
   )
   const vendingMachineUseCase = new VendingMachineUseCase(
     drizzleVendingMachineRepository
   )
-  const result = await vendingMachineUseCase.createVendingMachine(machine)
+  const userId = "1" // TODO: Get user id from session
+  const result = await vendingMachineUseCase.createVendingMachine(
+    machine,
+    userId
+  )
   return JSON.stringify(result)
 }
 
 export async function getMachines() {
-  const drizzleVendingMachineRepository = new DrizzleVendingMachineRepository(
-    db
-  )
-  const vendingMachineUseCase = new VendingMachineUseCase(
-    drizzleVendingMachineRepository
-  )
-  return await vendingMachineUseCase.getVendingMachines(organizationId)
+  try {
+    const vendingMachineRepo = new DrizzleVendingMachineRepository(db)
+    const vendingMachineUseCase = new VendingMachineUseCase(vendingMachineRepo)
+    const machines = await vendingMachineUseCase.getVendingMachines(
+      organizationId
+    )
+    console.log(machines)
+    return JSON.stringify(machines)
+  } catch (error) {
+    console.error("Failed to fetch machines:", error)
+    throw new Error("Failed to fetch machines")
+  }
 }

@@ -1,5 +1,7 @@
-import { Transaction } from "../entities/Transaction"
+import { PublicTransactionDataDTO } from "../DTOs/transactionDTOs"
 
 export interface TransactionRepository {
-  findByOrganizationId(organizationId: string): Promise<Transaction[]>
+  findByOrganizationId(
+    organizationId: string
+  ): Promise<PublicTransactionDataDTO[]>
 }

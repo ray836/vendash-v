@@ -40,234 +40,367 @@ import {
 } from "@/components/ui/table"
 import { SalesTableSkeleton } from "./sales-table-skeleton"
 import { SalesStats } from "./sales-stats"
+import { getOrgTransactions } from "./actions"
+import { PublicTransactionDataDTO } from "@/core/domain/DTOs/transactionDTOs"
+
+interface Product {
+  id: string
+  name: string
+  image: string
+  price: number
+}
+
+interface TransactionItem {
+  product: Product
+  quantity: number
+  price: number // Price at time of purchase
+}
+
+interface Transaction {
+  id: string
+  date: string
+  vendingMachine: {
+    id: string
+    location: string
+  }
+  items: TransactionItem[]
+  totalAmount: number
+  paymentMethod: string
+  status: "Completed" | "Processing" | "Refunded"
+}
 
 // Mock data for the sales table
-const salesData = [
+const salesData: Transaction[] = [
   {
     id: "TXN-001-28492",
-    product: {
-      name: "Organic Bananas",
-      image:
-        "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-15T14:32:00",
     vendingMachine: {
       id: "VM-001",
       location: "Main Street Mall",
     },
-    price: 3.99,
+    items: [
+      {
+        product: {
+          id: "P1",
+          name: "Organic Bananas",
+          image:
+            "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=100&h=100&q=80&fit=crop",
+          price: 3.99,
+        },
+        quantity: 2,
+        price: 3.99,
+      },
+      {
+        product: {
+          id: "P2",
+          name: "Trail Mix",
+          image:
+            "https://images.unsplash.com/photo-1604215707327-57f886e8d9d3?w=100&h=100&q=80&fit=crop",
+          price: 2.5,
+        },
+        quantity: 1,
+        price: 2.5,
+      },
+    ],
+    totalAmount: 10.48,
     paymentMethod: "Credit Card",
     status: "Completed",
   },
   {
     id: "TXN-001-28493",
-    product: {
-      name: "Whole Milk",
-      image:
-        "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-15T15:45:00",
     vendingMachine: {
       id: "VM-002",
       location: "Central Station",
     },
-    price: 4.5,
+    items: [
+      {
+        product: {
+          id: "P3",
+          name: "Whole Milk",
+          image:
+            "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=100&h=100&q=80&fit=crop",
+          price: 4.5,
+        },
+        quantity: 1,
+        price: 4.5,
+      },
+    ],
+    totalAmount: 4.5,
     paymentMethod: "Mobile Pay",
     status: "Completed",
   },
   {
     id: "TXN-001-28494",
-    product: {
-      name: "Sourdough Bread",
-      image:
-        "https://images.unsplash.com/photo-1585478259715-4ddc6572944d?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-15T16:20:00",
     vendingMachine: {
       id: "VM-003",
       location: "Downtown Office",
     },
-    price: 5.99,
+    items: [
+      {
+        product: {
+          id: "P4",
+          name: "Sourdough Bread",
+          image:
+            "https://images.unsplash.com/photo-1585478259715-4ddc6572944d?w=100&h=100&q=80&fit=crop",
+          price: 5.99,
+        },
+        quantity: 1,
+        price: 5.99,
+      },
+    ],
+    totalAmount: 5.99,
     paymentMethod: "Credit Card",
     status: "Completed",
   },
   {
     id: "TXN-001-28495",
-    product: {
-      name: "Organic Eggs",
-      image:
-        "https://images.unsplash.com/photo-1598965675045-45c7c640ef0c?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-15T17:05:00",
     vendingMachine: {
       id: "VM-001",
       location: "Main Street Mall",
     },
-    price: 6.49,
+    items: [
+      {
+        product: {
+          id: "P5",
+          name: "Organic Eggs",
+          image:
+            "https://images.unsplash.com/photo-1598965675045-45c7c640ef0c?w=100&h=100&q=80&fit=crop",
+          price: 6.49,
+        },
+        quantity: 1,
+        price: 6.49,
+      },
+    ],
+    totalAmount: 6.49,
     paymentMethod: "Cash",
     status: "Completed",
   },
   {
     id: "TXN-001-28496",
-    product: {
-      name: "Fresh Apples",
-      image:
-        "https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-16T09:15:00",
     vendingMachine: {
       id: "VM-004",
       location: "University Campus",
     },
-    price: 4.25,
+    items: [
+      {
+        product: {
+          id: "P6",
+          name: "Fresh Apples",
+          image:
+            "https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a?w=100&h=100&q=80&fit=crop",
+          price: 4.25,
+        },
+        quantity: 1,
+        price: 4.25,
+      },
+    ],
+    totalAmount: 4.25,
     paymentMethod: "Mobile Pay",
     status: "Completed",
   },
   {
     id: "TXN-001-28497",
-    product: {
-      name: "Protein Bars",
-      image:
-        "https://images.unsplash.com/photo-1622484212850-eb596d769edc?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-16T10:30:00",
     vendingMachine: {
       id: "VM-002",
       location: "Central Station",
     },
-    price: 3.5,
+    items: [
+      {
+        product: {
+          id: "P7",
+          name: "Protein Bars",
+          image:
+            "https://images.unsplash.com/photo-1622484212850-eb596d769edc?w=100&h=100&q=80&fit=crop",
+          price: 3.5,
+        },
+        quantity: 1,
+        price: 3.5,
+      },
+    ],
+    totalAmount: 3.5,
     paymentMethod: "Credit Card",
     status: "Refunded",
   },
   {
     id: "TXN-001-28498",
-    product: {
-      name: "Sparkling Water",
-      image:
-        "https://images.unsplash.com/photo-1598343175492-e316fb5aa3fd?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-16T11:45:00",
     vendingMachine: {
       id: "VM-003",
       location: "Downtown Office",
     },
-    price: 2.25,
+    items: [
+      {
+        product: {
+          id: "P8",
+          name: "Sparkling Water",
+          image:
+            "https://images.unsplash.com/photo-1598343175492-e316fb5aa3fd?w=100&h=100&q=80&fit=crop",
+          price: 2.25,
+        },
+        quantity: 1,
+        price: 2.25,
+      },
+    ],
+    totalAmount: 2.25,
     paymentMethod: "Mobile Pay",
     status: "Completed",
   },
   {
     id: "TXN-001-28499",
-    product: {
-      name: "Chocolate Bar",
-      image:
-        "https://images.unsplash.com/photo-1614088685112-0a760b71a3c8?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-16T13:20:00",
     vendingMachine: {
       id: "VM-001",
       location: "Main Street Mall",
     },
-    price: 1.99,
+    items: [
+      {
+        product: {
+          id: "P9",
+          name: "Chocolate Bar",
+          image:
+            "https://images.unsplash.com/photo-1614088685112-0a760b71a3c8?w=100&h=100&q=80&fit=crop",
+          price: 1.99,
+        },
+        quantity: 1,
+        price: 1.99,
+      },
+    ],
+    totalAmount: 1.99,
     paymentMethod: "Cash",
     status: "Completed",
   },
   {
     id: "TXN-001-28500",
-    product: {
-      name: "Trail Mix",
-      image:
-        "https://images.unsplash.com/photo-1604215707327-57f886e8d9d3?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-16T14:55:00",
     vendingMachine: {
       id: "VM-004",
       location: "University Campus",
     },
-    price: 3.75,
+    items: [
+      {
+        product: {
+          id: "P10",
+          name: "Trail Mix",
+          image:
+            "https://images.unsplash.com/photo-1604215707327-57f886e8d9d3?w=100&h=100&q=80&fit=crop",
+          price: 3.75,
+        },
+        quantity: 1,
+        price: 3.75,
+      },
+    ],
+    totalAmount: 3.75,
     paymentMethod: "Credit Card",
     status: "Processing",
   },
   {
     id: "TXN-001-28501",
-    product: {
-      name: "Fresh Orange Juice",
-      image:
-        "https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=100&h=100&q=80&fit=crop",
-    },
     date: "2023-03-16T16:10:00",
     vendingMachine: {
       id: "VM-002",
       location: "Central Station",
     },
-    price: 4.99,
+    items: [
+      {
+        product: {
+          id: "P11",
+          name: "Fresh Orange Juice",
+          image:
+            "https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=100&h=100&q=80&fit=crop",
+          price: 4.99,
+        },
+        quantity: 1,
+        price: 4.99,
+      },
+    ],
+    totalAmount: 4.99,
     paymentMethod: "Mobile Pay",
     status: "Completed",
   },
 ]
 
+function sortTransactionsByDate(transactions: PublicTransactionDataDTO[]) {
+  return [...transactions].sort((a, b) => {
+    const dateA = new Date(a.createdAt).getTime()
+    const dateB = new Date(b.createdAt).getTime()
+    return dateB - dateA // Sort in descending order (newest first)
+  })
+}
+
 export default function SalesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [date, setDate] = useState<Date | undefined>(undefined)
-  const [filteredSales, setFilteredSales] = useState(salesData)
+  const [filteredSales, setFilteredSales] = useState<
+    PublicTransactionDataDTO[]
+  >([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [allSales, setAllSales] = useState<PublicTransactionDataDTO[]>([])
 
-  // Simulate data loading when the component mounts
+  // Fetch data effect
   useEffect(() => {
-    // Simulate API fetch delay
-    const timer = setTimeout(() => {
-      setIsLoading(false)
-    }, 1500)
+    const fetchSales = async () => {
+      try {
+        const response = await getOrgTransactions()
+        const sorted = sortTransactionsByDate(response)
+        setAllSales(sorted)
+        setFilteredSales(sorted) // Initialize filtered sales with all sales
+      } catch (error) {
+        console.error("Failed to fetch sales:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
 
-    return () => clearTimeout(timer)
+    fetchSales()
   }, [])
 
-  // Simulate loading when filters change
+  // Filter effect
   useEffect(() => {
-    if (!isLoading) {
-      setIsLoading(true)
+    // Don't filter while loading initial data
+    if (isLoading) return
 
-      // Simulate filtering delay
-      const timer = setTimeout(() => {
-        let filtered = [...salesData]
+    const timer = setTimeout(() => {
+      let filtered = [...allSales]
 
-        // Apply search filter
-        if (searchQuery) {
-          filtered = filtered.filter(
-            (sale) =>
-              sale.product.name
-                .toLowerCase()
-                .includes(searchQuery.toLowerCase()) ||
-              sale.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              sale.vendingMachine.id
-                .toLowerCase()
-                .includes(searchQuery.toLowerCase()) ||
-              sale.vendingMachine.location
-                .toLowerCase()
-                .includes(searchQuery.toLowerCase())
-          )
-        }
+      if (searchQuery) {
+        filtered = filtered.filter(
+          (sale) =>
+            sale.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            sale.cardReaderId
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase()) ||
+            sale.last4CardDigits
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase())
+        )
+      }
 
-        // Apply status filter
-        if (statusFilter !== "all") {
-          filtered = filtered.filter(
-            (sale) => sale.status.toLowerCase() === statusFilter.toLowerCase()
-          )
-        }
+      if (statusFilter !== "all") {
+        filtered = filtered.filter(
+          (sale) =>
+            sale.transactionType.toLowerCase() === statusFilter.toLowerCase()
+        )
+      }
 
-        // Apply date filter
-        if (date) {
-          const dateString = date.toISOString().split("T")[0]
-          filtered = filtered.filter((sale) => sale.date.startsWith(dateString))
-        }
+      if (date) {
+        const dateString = format(date, "yyyy-MM-dd")
+        filtered = filtered.filter(
+          (sale) =>
+            format(new Date(sale.createdAt), "yyyy-MM-dd") === dateString
+        )
+      }
 
-        setFilteredSales(filtered)
-        setIsLoading(false)
-      }, 500)
+      setFilteredSales(filtered)
+    }, 500)
 
-      return () => clearTimeout(timer)
-    }
-  }, [searchQuery, statusFilter, date])
+    return () => clearTimeout(timer)
+  }, [searchQuery, statusFilter, date, allSales, isLoading])
 
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,10 +414,9 @@ export default function SalesPage() {
 
   // Calculate summary statistics
   const totalSales = filteredSales.length
-  const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.price, 0)
-  const uniqueMachines = new Set(
-    filteredSales.map((sale) => sale.vendingMachine.id)
-  ).size
+  const totalRevenue = filteredSales.reduce((sum, sale) => sum + sale.total, 0)
+  const uniqueMachines = new Set(filteredSales.map((sale) => sale.cardReaderId))
+    .size
 
   return (
     <div className="container mx-auto py-6 space-y-8">
@@ -373,10 +505,10 @@ export default function SalesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Transaction ID</TableHead>
-                      <TableHead>Product</TableHead>
+                      <TableHead>Products</TableHead>
                       <TableHead>Date & Time</TableHead>
                       <TableHead>Vending Machine</TableHead>
-                      <TableHead>Price</TableHead>
+                      <TableHead>Total</TableHead>
                       <TableHead>Payment</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
@@ -386,21 +518,50 @@ export default function SalesPage() {
                       <TableRow key={sale.id}>
                         <TableCell className="font-medium">{sale.id}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="relative h-10 w-10 overflow-hidden rounded-md">
-                              <Image
-                                src={sale.product.image || "/placeholder.svg"}
-                                alt={sale.product.name}
-                                fill
-                                className="object-cover"
-                                unoptimized
-                              />
+                          <div className="rounded-md border bg-muted/50 p-3">
+                            <div className="space-y-3">
+                              {sale.items.map((item) => (
+                                <div
+                                  key={item.product.id}
+                                  className="flex items-center gap-3 bg-background rounded-sm p-2 relative"
+                                >
+                                  <div className="relative h-10 w-10 overflow-hidden rounded-md">
+                                    <Image
+                                      src={
+                                        item.product.image || "/placeholder.svg"
+                                      }
+                                      alt={item.product.name}
+                                      fill
+                                      className="object-cover"
+                                      unoptimized
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="font-medium">
+                                      {item.product.name}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {item.quantity}x @ $
+                                      {item.salePrice.toFixed(2)}
+                                    </div>
+                                  </div>
+                                  <Badge
+                                    variant={
+                                      item.slotCode ? "outline" : "destructive"
+                                    }
+                                    className="text-xs absolute top-2 right-2"
+                                  >
+                                    {item.slotCode
+                                      ? `Slot ${item.slotCode}`
+                                      : "No slot"}
+                                  </Badge>
+                                </div>
+                              ))}
                             </div>
-                            <span>{sale.product.name}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          {new Date(sale.date).toLocaleString("en-US", {
+                          {new Date(sale.createdAt).toLocaleString("en-US", {
                             dateStyle: "medium",
                             timeStyle: "short",
                           })}
@@ -408,26 +569,24 @@ export default function SalesPage() {
                         <TableCell>
                           <div>
                             <div className="font-medium">
-                              {sale.vendingMachine.id}
+                              {sale.cardReaderId}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {sale.vendingMachine.location}
+                              {sale.last4CardDigits}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>${sale.price.toFixed(2)}</TableCell>
-                        <TableCell>{sale.paymentMethod}</TableCell>
+                        <TableCell>${sale.total.toFixed(2)}</TableCell>
+                        <TableCell>{sale.transactionType}</TableCell>
                         <TableCell>
                           <Badge
                             variant={
-                              sale.status === "Completed"
-                                ? "default"
-                                : sale.status === "Processing"
-                                ? "outline"
-                                : "destructive"
+                              sale.vendingMachineId ? "default" : "destructive"
                             }
                           >
-                            {sale.status}
+                            {sale.vendingMachineId
+                              ? sale.vendingMachineId
+                              : "No machine"}
                           </Badge>
                         </TableCell>
                       </TableRow>

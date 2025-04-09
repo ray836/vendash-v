@@ -1,0 +1,1 @@
+ALTER TABLE "vending_machines" ADD COLUMN "status" varchar(256) NOT NULL;

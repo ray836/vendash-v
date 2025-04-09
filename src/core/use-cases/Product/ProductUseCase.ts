@@ -1,11 +1,11 @@
 import { ProductRepository } from "@/core/domain/interfaces/ProductRepository"
 import { Product } from "@/core/domain/entities/Product"
-import { ProductDTO } from "@/core/domain/interfaces/dtos/ProductDTO"
+import { PublicProductDTO } from "@/core/domain/DTOs/productDTOs"
 
 export class ProductUseCase {
   constructor(private readonly productRepository: ProductRepository) {}
 
-  async create(product: ProductDTO): Promise<Product> {
+  async create(product: Product): Promise<Product> {
     return this.productRepository.create(product)
   }
 
@@ -13,15 +13,17 @@ export class ProductUseCase {
     return this.productRepository.findById(id)
   }
 
-  async findAll(): Promise<ProductDTO[]> {
+  async findAll(): Promise<PublicProductDTO[]> {
     return this.productRepository.findAll()
   }
 
-  async findByOrganizationId(organizationId: string): Promise<Product[]> {
+  async findByOrganizationId(
+    organizationId: string
+  ): Promise<PublicProductDTO[]> {
     return this.productRepository.findByOrganizationId(organizationId)
   }
 
-  async update(product: ProductDTO): Promise<Product> {
+  async update(product: Product): Promise<Product> {
     return this.productRepository.update(product)
   }
 

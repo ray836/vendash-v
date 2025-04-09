@@ -1,0 +1,1 @@
+ALTER TABLE "transactions" ALTER COLUMN "slot_code" SET DEFAULT '';

@@ -1,10 +1,10 @@
 import { Product } from "../entities/Product"
-import { ProductDTO } from "./dtos/ProductDTO"
+import { PublicProductDTO } from "../DTOs/productDTOs"
 export interface ProductRepository {
-  create(product: ProductDTO): Promise<Product>
+  create(product: Product): Promise<Product>
   findById(id: string): Promise<Product | null>
-  findAll(): Promise<ProductDTO[]>
-  findByOrganizationId(organizationId: string): Promise<Product[]>
-  update(product: ProductDTO): Promise<Product>
+  findAll(): Promise<PublicProductDTO[]>
+  findByOrganizationId(organizationId: string): Promise<PublicProductDTO[]>
+  update(product: Product): Promise<Product>
   delete(id: string): Promise<void>
 }

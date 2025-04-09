@@ -1,15 +1,13 @@
-import { CreateVendingMachineDTO } from "@/core/use-cases/VendingMachine/dtos/CreateVendingMachineDTO"
 import { VendingMachine } from "../entities/VendingMachine"
-import { VendingMachineDTO } from "@/core/domain/interfaces/dtos/VendingMachineDTO"
+import { UpdateVendingMachineRequestDTO } from "../DTOs/vendingMachineDTOs"
 export interface VendingMachineRepository {
-  createVendingMachine(
-    vendingMachine: CreateVendingMachineDTO
-  ): Promise<VendingMachineDTO>
-  getVendingMachine(id: string): Promise<VendingMachineDTO | null>
+  createVendingMachine(vendingMachine: VendingMachine): Promise<VendingMachine>
+  getVendingMachine(id: string): Promise<VendingMachine | null>
   updateVendingMachine(
-    vendingMachine: VendingMachine,
-    userId: string
-  ): Promise<VendingMachineDTO>
+    vendingMachine: UpdateVendingMachineRequestDTO,
+    userId: string,
+    machineId: string
+  ): Promise<VendingMachine>
   deleteVendingMachine(id: string): Promise<void>
-  getVendingMachines(organizationId: string): Promise<VendingMachineDTO[]>
+  getVendingMachines(organizationId: string): Promise<VendingMachine[]>
 }

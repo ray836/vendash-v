@@ -20,4 +20,17 @@ export class Transaction {
   public get total() {
     return this.props.total
   }
+  public get last4CardDigits() {
+    return this.props.last4CardDigits
+  }
+  public get cardReaderId() {
+    return this.props.cardReaderId
+  }
+
+  public validate() {
+    // check that the transaction has a machine
+    // check that the transaction has a slot
+    // check that the transaction items are sold for the slot price
+    return BaseTransactionDTO.parse(this.props)
+  }
 }

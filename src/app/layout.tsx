@@ -4,6 +4,7 @@ import type React from "react"
 import { Inter } from "next/font/google"
 import { Header } from "@/app/web/components/header"
 import { ThemeProvider } from "./web/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default function RootLayout({
             <div className="flex-1">{children}</div>
           </div>
         </ThemeProvider>
+        <Toaster />
       </body>
     </html>
   )

@@ -6,6 +6,8 @@ import {
   timestamp,
   varchar,
   decimal,
+  primaryKey,
+  jsonb,
 } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm"
 
@@ -15,14 +17,41 @@ export const vendingMachines = pgTable("vending_machines", {
   locationId: text("location_id").notNull(),
   model: varchar("model", { length: 256 }).notNull(),
   notes: text("notes"),
+  status: varchar("status", { length: 256 }).notNull().default("OFFLINE"),
   organizationId: text("organization_id")
     .references(() => organizations.id)
     .notNull(),
+  cardReaderId: text("card_reader_id"),
   createdBy: text("created_by")
     .references(() => users.id)
     .notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: text("updated_by")
+    .references(() => users.id)
+    .notNull(),
+})
+
+export const slots = pgTable("slots", {
+  id: text("id").primaryKey(),
+  machineId: text("machine_id")
+    .references(() => vendingMachines.id)
+    .notNull(),
+  productId: text("product_id")
+    .references(() => products.id)
+    .notNull(),
+  labelCode: text("label_code").notNull(),
+  ccReaderCode: text("cc_reader_code").default(""),
+  cardReaderId: text("card_reader_id").default(""),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  capacity: integer("capacity").default(10),
+  currentQuantity: integer("current_quantity").default(0),
+  sequenceNumber: integer("sequence_number").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: text("created_by")
+    .references(() => users.id)
+    .notNull(),
   updatedBy: text("updated_by")
     .references(() => users.id)
     .notNull(),
@@ -69,20 +98,24 @@ export const products = pgTable("products", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })
 
-// TODO: check if this schema will work
-export const inventory = pgTable("inventory", {
-  productId: text("product_id")
-    .references(() => products.id)
-    .primaryKey()
-    .notNull(),
-  storage: integer("storage").notNull(),
-  machines: integer("machines").notNull(),
-  organizationId: text("organization_id")
-    .references(() => organizations.id)
-    .notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-})
+export const inventory = pgTable(
+  "inventory",
+  {
+    productId: text("product_id")
+      .references(() => products.id)
+      .notNull(),
+    organizationId: text("organization_id")
+      .references(() => organizations.id)
+      .notNull(),
+    storage: integer("storage").notNull(),
+    machines: integer("machines").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.organizationId, table.productId] }),
+  })
+)
 
 export const transactions = pgTable("transactions", {
   id: text("id").primaryKey(),
@@ -93,6 +126,8 @@ export const transactions = pgTable("transactions", {
   transactionType: text("transaction_type").notNull(),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
   last4CardDigits: text("last_4_card_digits").notNull(),
+  cardReaderId: text("card_reader_id").notNull(),
+  data: jsonb("data").notNull().default({}),
 })
 
 export const transactionItems = pgTable("transaction_items", {
@@ -105,6 +140,7 @@ export const transactionItems = pgTable("transaction_items", {
     .notNull(),
   quantity: integer("quantity").notNull(),
   salePrice: decimal("sale_price", { precision: 10, scale: 2 }).notNull(),
+  slotCode: text("slot_code").notNull().default(""),
 })
 
 // Define the relations

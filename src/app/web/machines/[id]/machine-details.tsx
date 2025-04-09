@@ -27,74 +27,86 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-
-// Sample machine data - in a real app, this would come from your backend
-const getMachineData = (id: string) => {
-  return {
-    id,
-    name: `Vending Machine ${id}`,
-    type: id.startsWith("D") ? "drink" : "snack",
-    location: id.startsWith("D")
-      ? "Main Building - Floor 1"
-      : "Science Block - Floor 2",
-    status: "Online",
-    setupStatus: id === "VM001" || id === "D001" ? "complete" : "pending",
-    inventory: 72,
-    revenue: {
-      daily: "$145.50",
-      weekly: "$876.25",
-      monthly: "$3,245.75",
-    },
-    alerts: id === "VM001" ? 0 : 2,
-    lastRestocked: "2023-11-15T10:30:00",
-    lastMaintenance: "2023-10-28T14:15:00",
-    slots: {
-      total: id.startsWith("D") ? 10 : 24,
-      filled:
-        id === "VM001" || id === "D001" ? (id.startsWith("D") ? 8 : 20) : 0,
-    },
-  }
-}
+import { getMachineWithSlots } from "./actions"
+import { MachineWithSlotsDTO } from "@/core/use-cases/VendingMachine/GetMachineWithSlotsUseCase"
+import { MachineType } from "@/core/domain/entities/VendingMachine"
+import { PublicSlotDTO } from "@/core/domain/DTOs/slotDTOs"
+import { PublicSlotWithProductDTO } from "@/core/domain/DTOs/slotDTOs"
 
 interface MachineDetailsProps {
   id: string
 }
 
+function calculateOverallInventory(slots: PublicSlotDTO[]) {
+  if (slots.length === 0) return 0
+
+  const totalQuantity = slots.reduce(
+    (sum, slot) => sum + slot.currentQuantity,
+    0
+  )
+  const totalCapacity = slots.reduce((sum, slot) => sum + slot.capacity, 0)
+
+  return Math.round((totalQuantity / totalCapacity) * 100)
+}
+
+function getGridDimensions(slots: PublicSlotWithProductDTO[]) {
+  if (slots.length === 0) return { rows: 0, columns: 0 }
+
+  const maxRow =
+    Math.max(...slots.map((slot) => slot.row.charCodeAt(0) - 65)) + 1 // Convert 'A' to 0, 'B' to 1, etc.
+  const maxColumn = Math.max(...slots.map((slot) => slot.column)) + 1
+
+  return {
+    rows: maxRow,
+    columns: maxColumn,
+  }
+}
+
 export default function MachineDetails({ id }: MachineDetailsProps) {
   const router = useRouter()
-  const [machine, setMachine] = useState<ReturnType<
-    typeof getMachineData
-  > | null>(null)
+  const [machineData, setMachineData] = useState<MachineWithSlotsDTO | null>(
+    null
+  )
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate API call to fetch machine data
-    setMachine(getMachineData(id))
+    const fetchMachineData = async () => {
+      try {
+        const data = await getMachineWithSlots(id)
+        setMachineData(data)
+      } catch (error) {
+        console.error("Failed to fetch machine data:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchMachineData()
   }, [id])
 
-  if (!machine) {
+  if (isLoading || !machineData) {
     return (
       <div className="flex justify-center items-center h-64">Loading...</div>
     )
   }
 
-  const isSetup = machine.setupStatus === "complete"
-  const setupPercentage = Math.round(
-    (machine.slots.filled / machine.slots.total) * 100
-  )
+  const { machine, slots, revenue, setup, lastRestocked, lastMaintenance } =
+    machineData
+  const isSetup = setup.status === "complete"
+  const setupPercentage = setup.percentage
 
   const handleSetupClick = () => {
     router.push(`/web/machines/${id}/setup`)
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
+  const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    }).format(date)
+    }).format(new Date(date))
   }
 
   return (
@@ -109,16 +121,16 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
             Back to Dashboard
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{machine.name}</h1>
+            <h1 className="text-2xl font-bold">Vending Machine {machine.id}</h1>
             <Badge
-              variant={machine.status === "Online" ? "default" : "destructive"}
+              variant={machine.status === "ONLINE" ? "default" : "destructive"}
             >
               {machine.status}
             </Badge>
           </div>
           <p className="text-muted-foreground flex items-center mt-1">
             <MapPin className="h-4 w-4 mr-1" />
-            {machine.location}
+            {machine.locationId}
           </p>
         </div>
         <div className="flex gap-2">
@@ -145,7 +157,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
             <CardTitle className="text-base">Setup Status</CardTitle>
             <CardDescription>
               {isSetup
-                ? `${machine.slots.filled} of ${machine.slots.total} slots configured`
+                ? `${slots.length} slots configured`
                 : "Machine needs to be configured"}
             </CardDescription>
           </CardHeader>
@@ -154,7 +166,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
               <div className="flex justify-between text-sm">
                 <span>{setupPercentage}% Complete</span>
                 <span className="text-muted-foreground">
-                  {machine.slots.filled}/{machine.slots.total} slots
+                  {slots.length} slots configured
                 </span>
               </div>
               <Progress value={setupPercentage} className="h-2" />
@@ -181,18 +193,52 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
 
         <Card>
           <CardHeader className="pb-2">
+            <CardTitle className="text-base">Revenue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Daily Revenue</p>
+                  <p className="text-2xl font-bold">
+                    ${revenue.daily.toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Weekly Revenue</p>
+                  <p className="text-2xl font-bold">
+                    ${revenue.weekly.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Monthly Revenue</p>
+                <p className="text-2xl font-bold">
+                  ${revenue.monthly.toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
             <CardTitle className="text-base">Inventory Status</CardTitle>
             <CardDescription>Current stock level</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>{machine.inventory}% Full</span>
+                <span>{calculateOverallInventory(slots)}% Full</span>
                 <span className="text-muted-foreground">
-                  {machine.inventory < 30 ? "Low Stock" : "Good Stock"}
+                  {slots.reduce((sum, slot) => sum + slot.currentQuantity, 0)} /{" "}
+                  {slots.reduce((sum, slot) => sum + slot.capacity, 0)} items
                 </span>
               </div>
-              <Progress value={machine.inventory} className="h-2" />
+              <Progress
+                value={calculateOverallInventory(slots)}
+                className="h-2"
+              />
             </div>
           </CardContent>
           <CardFooter>
@@ -201,7 +247,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                 <Calendar className="h-4 w-4 mr-1" />
                 Last Restocked
               </span>
-              <span>{formatDate(machine.lastRestocked)}</span>
+              <span>{formatDate(lastRestocked)}</span>
             </div>
           </CardFooter>
         </Card>
@@ -210,30 +256,29 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Alerts</CardTitle>
             <CardDescription>
-              {machine.alerts === 0
+              {machineData.alerts.length === 0
                 ? "No active alerts"
-                : `${machine.alerts} active alert${
-                    machine.alerts > 1 ? "s" : ""
+                : `${machineData.alerts.length} active alert${
+                    machineData.alerts.length > 1 ? "s" : ""
                   }`}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {machine.alerts === 0 ? (
+            {machineData.alerts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-20 text-muted-foreground">
                 <p>All systems operational</p>
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span>Low inventory in 2 slots</span>
-                </div>
-                {machine.alerts > 1 && (
-                  <div className="flex items-center gap-2 text-sm text-amber-500">
+                {machineData.alerts.map((alert, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 text-sm text-destructive"
+                  >
                     <AlertTriangle className="h-4 w-4" />
-                    <span>Maintenance due in 3 days</span>
+                    <span>{alert}</span>
                   </div>
-                )}
+                ))}
               </div>
             )}
           </CardContent>
@@ -243,7 +288,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                 <Calendar className="h-4 w-4 mr-1" />
                 Last Maintenance
               </span>
-              <span>{formatDate(machine.lastMaintenance)}</span>
+              <span>{formatDate(lastMaintenance)}</span>
             </div>
           </CardFooter>
         </Card>
@@ -260,8 +305,8 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
             <CardHeader>
               <CardTitle>Machine Overview</CardTitle>
               <CardDescription>
-                {machine.type === "snack" ? "Snack" : "Drink"} vending machine
-                with {machine.slots.total} slots
+                {machine.type === MachineType.SNACK ? "Snack" : "Drink"} vending
+                machine with {slots.length} slots
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -277,7 +322,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                 <div className="space-y-1">
                   <h3 className="text-sm font-medium leading-none">Location</h3>
                   <p className="text-sm text-muted-foreground">
-                    {machine.location}
+                    {machine.locationId}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -291,7 +336,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                     Total Slots
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {machine.slots.total} slots
+                    {slots.length} slots
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -299,7 +344,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                     Configured Slots
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {machine.slots.filled} slots ({setupPercentage}%)
+                    {slots.length} slots ({setupPercentage}%)
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -307,7 +352,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                     Inventory Level
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {machine.inventory}% full
+                    {calculateOverallInventory(slots)}% full
                   </p>
                 </div>
               </div>
@@ -319,35 +364,80 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   <h3 className="text-sm font-medium mb-2">
                     Machine Visualization
                   </h3>
-                  <div className="border rounded-lg p-4">
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium">Machine Layout</h3>
                     <div
                       className="grid gap-2 w-full"
                       style={{
                         display: "grid",
                         gridTemplateColumns: `repeat(${
-                          machine.type === "drink" ? 5 : 4
+                          getGridDimensions(slots).columns
                         }, minmax(0, 1fr))`,
                         gridTemplateRows: `repeat(${
-                          machine.type === "drink" ? 2 : 6
+                          getGridDimensions(slots).rows
                         }, minmax(0, 1fr))`,
-                        aspectRatio: machine.type === "drink" ? "5/2" : "4/6",
+                        aspectRatio: `${getGridDimensions(slots).columns}/${
+                          getGridDimensions(slots).rows
+                        }`,
                       }}
                     >
-                      {Array.from({ length: machine.slots.total }).map(
-                        (_, i) => (
+                      {slots.map((slot) => {
+                        const rowIndex = slot.row.charCodeAt(0) - 65 // Convert 'A' to 0, 'B' to 1, etc.
+                        return (
                           <div
-                            key={i}
+                            key={slot.id}
+                            style={{
+                              gridRow: rowIndex + 1,
+                              gridColumn: slot.column + 1,
+                            }}
                             className={`
-                              border rounded-md bg-muted/20 aspect-square w-full h-full
+                              border rounded-md bg-muted/20 aspect-square w-full h-full relative
                               ${
-                                i < machine.slots.filled
-                                  ? "bg-primary/10 border-primary/30"
+                                slot.currentQuantity > 0
+                                  ? "border-primary/30"
                                   : ""
                               }
+                              ${
+                                slot.productId
+                                  ? "cursor-pointer hover:bg-primary/20"
+                                  : ""
+                              }
+                              overflow-hidden
                             `}
-                          />
+                            title={slot.productName || "Empty Slot"}
+                          >
+                            {/* Background Image */}
+                            {slot.productImage && (
+                              <div
+                                className="absolute inset-0 bg-cover bg-center opacity-10"
+                                style={{
+                                  backgroundImage: `url(${slot.productImage})`,
+                                }}
+                              />
+                            )}
+
+                            {/* Content */}
+                            <div className="flex flex-col items-center justify-center h-full text-xs p-1 relative z-10">
+                              <span className="font-medium absolute top-1 left-1">
+                                {slot.labelCode}
+                              </span>
+                              {slot.productName && (
+                                <>
+                                  <span className="text-muted-foreground text-center line-clamp-1 bg-background/80 px-1 rounded">
+                                    {slot.productName}
+                                  </span>
+                                  <span className="text-primary font-medium bg-background/80 px-1 rounded">
+                                    ${slot.price.toFixed(2)}
+                                  </span>
+                                  <span className="text-muted-foreground absolute bottom-1 right-1 bg-background/80 px-1 rounded">
+                                    {slot.currentQuantity}/{slot.capacity}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
                         )
-                      )}
+                      })}
                     </div>
                   </div>
                 </div>
@@ -360,7 +450,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                           Restocked
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {formatDate(machine.lastRestocked)}
+                          {formatDate(lastRestocked)}
                         </p>
                       </div>
                       <Package className="h-4 w-4 text-muted-foreground" />
@@ -371,7 +461,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                           Maintenance
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {formatDate(machine.lastMaintenance)}
+                          {formatDate(lastMaintenance)}
                         </p>
                       </div>
                       <Settings className="h-4 w-4 text-muted-foreground" />
@@ -408,7 +498,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   <div className="flex items-center">
                     <Banknote className="h-5 w-5 mr-2 text-primary" />
                     <p className="text-2xl font-bold">
-                      {machine.revenue.daily}
+                      ${revenue.daily.toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -419,7 +509,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   <div className="flex items-center">
                     <Banknote className="h-5 w-5 mr-2 text-primary" />
                     <p className="text-2xl font-bold">
-                      {machine.revenue.weekly}
+                      ${revenue.weekly.toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -430,7 +520,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   <div className="flex items-center">
                     <Banknote className="h-5 w-5 mr-2 text-primary" />
                     <p className="text-2xl font-bold">
-                      {machine.revenue.monthly}
+                      ${revenue.monthly.toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -485,7 +575,10 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium">Overall Inventory</h3>
-                    <Progress value={machine.inventory} className="h-2" />
+                    <Progress
+                      value={calculateOverallInventory(slots)}
+                      className="h-2"
+                    />
                     <div className="flex justify-between text-sm text-muted-foreground">
                       <span>Empty</span>
                       <span>Full</span>
@@ -497,48 +590,30 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   <div className="space-y-4">
                     <h3 className="text-sm font-medium">Top Products</h3>
                     <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                            <Package className="h-4 w-4 text-primary" />
+                      {slots.map((slot, index) => (
+                        <div
+                          key={index}
+                          className="flex justify-between items-center"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
+                              <Package className="h-4 w-4 text-primary" />
+                            </div>
+                            <span className="text-sm font-medium">
+                              {slot.labelCode}
+                            </span>
                           </div>
-                          <span className="text-sm font-medium">Coca-Cola</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-sm text-muted-foreground">
-                            85% full
-                          </span>
-                          <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                            <Package className="h-4 w-4 text-primary" />
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm text-muted-foreground">
+                              {Math.round(
+                                (slot.currentQuantity / slot.capacity) * 100
+                              )}
+                              % full
+                            </span>
+                            <BarChart3 className="h-4 w-4 text-muted-foreground" />
                           </div>
-                          <span className="text-sm font-medium">Doritos</span>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-sm text-muted-foreground">
-                            62% full
-                          </span>
-                          <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                            <Package className="h-4 w-4 text-primary" />
-                          </div>
-                          <span className="text-sm font-medium">Snickers</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-sm text-destructive">
-                            15% full
-                          </span>
-                          <AlertTriangle className="h-4 w-4 text-destructive" />
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>

@@ -1,13 +1,13 @@
 import { ProductRepository } from "@/core/domain/interfaces/ProductRepository"
-import { ProductDTO } from "@/core/domain/interfaces/dtos/ProductDTO"
 import { Product } from "@/core/domain/entities/Product"
 import { products } from "@/infrastructure/database/schema"
 import { db } from "../database"
 import { eq } from "drizzle-orm"
+import { PublicProductDTO } from "@/core/domain/DTOs/productDTOs"
 export class DrizzleProductRepository implements ProductRepository {
   constructor(private readonly database: typeof db) {}
 
-  async create(product: ProductDTO): Promise<Product> {
+  async create(product: Product): Promise<Product> {
     const result = await this.database
       .insert(products)
       .values({
@@ -53,34 +53,34 @@ export class DrizzleProductRepository implements ProductRepository {
     })
   }
 
-  async findAll(): Promise<Product[]> {
+  async findAll(): Promise<PublicProductDTO[]> {
     const result = await this.database.select().from(products)
-    return result.map(
-      (product) =>
-        new Product({
-          ...product,
-          recommendedPrice: parseFloat(product.recommendedPrice),
-          caseCost: parseFloat(product.caseCost),
-        })
+    return result.map((product) =>
+      PublicProductDTO.parse({
+        ...product,
+        recommendedPrice: parseFloat(product.recommendedPrice),
+        caseCost: parseFloat(product.caseCost),
+      })
     )
   }
 
-  async findByOrganizationId(organizationId: string): Promise<Product[]> {
+  async findByOrganizationId(
+    organizationId: string
+  ): Promise<PublicProductDTO[]> {
     const result = await this.database
       .select()
       .from(products)
       .where(eq(products.organizationId, organizationId))
-    return result.map(
-      (product) =>
-        new Product({
-          ...product,
-          recommendedPrice: parseFloat(product.recommendedPrice),
-          caseCost: parseFloat(product.caseCost),
-        })
+    return result.map((product) =>
+      PublicProductDTO.parse({
+        ...product,
+        recommendedPrice: parseFloat(product.recommendedPrice),
+        caseCost: parseFloat(product.caseCost),
+      })
     )
   }
 
-  async update(product: ProductDTO): Promise<Product> {
+  async update(product: Product): Promise<Product> {
     const result = await this.database
       .update(products)
       .set({
