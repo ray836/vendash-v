@@ -155,6 +155,41 @@
       "when": 1743813717912,
       "tag": "0021_fancy_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1744325277662,
+      "tag": "0022_absent_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1745088194156,
+      "tag": "0023_shiny_golden_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1745196681281,
+      "tag": "0024_slippery_mauler",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1745249871649,
+      "tag": "0025_past_groot",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1745258854434,
+      "tag": "0026_living_warstar",
+      "breakpoints": true
     }
   ]
 }

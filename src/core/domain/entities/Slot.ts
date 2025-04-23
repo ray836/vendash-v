@@ -4,6 +4,9 @@ export class Slot {
   public get id() {
     return this.props.id
   }
+  public get organizationId() {
+    return this.props.organizationId
+  }
   public get machineId() {
     return this.props.machineId
   }

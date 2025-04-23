@@ -11,6 +11,7 @@ import {
   Menu,
   ShoppingCart,
   DollarSign,
+  ClipboardList,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -42,6 +43,11 @@ const navItems = [
     title: "Sales",
     href: "/web/sales",
     icon: DollarSign,
+  },
+  {
+    title: "Pre-kits",
+    href: "/web/prekits",
+    icon: ClipboardList,
   },
   {
     title: "Settings",

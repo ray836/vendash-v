@@ -5,7 +5,7 @@ import { PublicProductDTO } from "@/core/domain/DTOs/productDTOs"
 export class ProductUseCase {
   constructor(private readonly productRepository: ProductRepository) {}
 
-  async create(product: Product): Promise<Product> {
+  async create(product: Product): Promise<PublicProductDTO> {
     return this.productRepository.create(product)
   }
 

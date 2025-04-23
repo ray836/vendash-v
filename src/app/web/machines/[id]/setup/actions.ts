@@ -9,7 +9,7 @@ import { PublicSlotDTO } from "@/core/domain/DTOs/slotDTOs"
 import { DrizzleVendingMachineRepository } from "@/infrastructure/repositories/drizzle-VendingMachineRepo"
 import { GetMachineWithSlotsUseCase } from "@/core/use-cases/VendingMachine/GetMachineWithSlotsUseCase"
 import { VendingMachineUseCase } from "@/core/use-cases/VendingMachine/VendingMachineUseCase"
-
+import { UpdateMachineCardReaderUseCase } from "@/core/use-cases/VendingMachine/UpdateMachineCardReaderUseCase"
 // get products for machine
 
 export async function getOrgProducts() {
@@ -46,12 +46,16 @@ export async function getMachineWithSlots(machineId: string) {
   }
 }
 
-export async function saveSlots(machineId: string, slots: PublicSlotDTO[]) {
+export async function saveSlots(
+  machineId: string,
+  slots: PublicSlotDTO[],
+  ccReaderId: string
+) {
   try {
     const slotRepo = new DrizzleSlotRepository(db)
     const machineRepo = new DrizzleVendingMachineRepository(db)
     const saveSlotsUseCase = new SaveSlotsUseCase(slotRepo, machineRepo)
-    await saveSlotsUseCase.execute(machineId, slots)
+    await saveSlotsUseCase.execute(machineId, slots, "1", "1", ccReaderId)
     return { success: true }
   } catch (error) {
     console.error("Failed to save slots:", error)
@@ -63,24 +67,31 @@ export async function getMachine(machineId: string) {
   const machineRepo = new DrizzleVendingMachineRepository(db)
   const machineUseCase = new VendingMachineUseCase(machineRepo)
   const machine = await machineUseCase.getVendingMachine(machineId)
+  console.log("machineId", machineId)
+  console.log("machine:", machine)
   return machine
 }
 
 export async function updateMachine(
   machineId: string,
-  updates: { cardReaderId: string }
+  updates: { cardReaderId?: string }
 ) {
   try {
     const machineRepo = new DrizzleVendingMachineRepository(db)
-    const machineUseCase = new VendingMachineUseCase(machineRepo)
-
-    await machineUseCase.updateVendingMachine(
-      { cardReaderId: updates.cardReaderId },
-      "1", // userId
-      machineId
+    const slotRepo = new DrizzleSlotRepository(db)
+    const updateMachineCardReaderUseCase = new UpdateMachineCardReaderUseCase(
+      machineRepo,
+      slotRepo
     )
 
-    return { success: true }
+    const updatedMachine = await updateMachineCardReaderUseCase.execute(
+      machineId,
+      updates.cardReaderId || "",
+      "1" // userId
+    )
+    console.log("updated machine", updatedMachine)
+
+    return updatedMachine
   } catch (error) {
     console.error("Failed to update machine:", error)
     throw new Error("Failed to update machine configuration")

@@ -3,11 +3,10 @@ import { getOrgProducts, getMachineWithSlots } from "./actions"
 import { Suspense } from "react"
 
 export default async function MachineSetupPage({
-  params,
+  params: { id },
 }: {
   params: { id: string }
 }) {
-  const id = params.id
   const orgProducts = await getOrgProducts()
   const machineData = await getMachineWithSlots(id)
 

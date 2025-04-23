@@ -31,10 +31,10 @@ export const BaseVendingMachineDTO = z.object({
     required_error: "createdBy is required",
   }),
   updatedBy: z.string(),
-  createdAt: z.string({
+  createdAt: z.date({
     required_error: "createdAt is required",
   }),
-  updatedAt: z.string(),
+  updatedAt: z.date(),
 })
 export type BaseVendingMachineDTO = z.infer<typeof BaseVendingMachineDTO>
 

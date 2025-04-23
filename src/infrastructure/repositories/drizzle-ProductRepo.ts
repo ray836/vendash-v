@@ -7,7 +7,7 @@ import { PublicProductDTO } from "@/core/domain/DTOs/productDTOs"
 export class DrizzleProductRepository implements ProductRepository {
   constructor(private readonly database: typeof db) {}
 
-  async create(product: Product): Promise<Product> {
+  async create(product: Product): Promise<PublicProductDTO> {
     const result = await this.database
       .insert(products)
       .values({
@@ -18,7 +18,7 @@ export class DrizzleProductRepository implements ProductRepository {
         image: product.image,
         vendorLink: product.vendorLink,
         caseCost: product.caseCost.toString(),
-        caseSize: product.caseSize,
+        caseSize: product.caseSize.toString(),
         shippingAvailable: product.shippingAvailable,
         shippingTimeInDays: product.shippingTimeInDays,
         organizationId: product.organizationId,
@@ -30,19 +30,23 @@ export class DrizzleProductRepository implements ProductRepository {
     }
 
     // Create proper BaseProductDTO and return new Product instance
-    return new Product({
+    return PublicProductDTO.parse({
       ...createdProduct,
       recommendedPrice: parseFloat(createdProduct.recommendedPrice),
       caseCost: parseFloat(createdProduct.caseCost),
+      caseSize: parseFloat(createdProduct.caseSize),
     })
   }
 
   async findById(id: string): Promise<Product | null> {
+    console.log("here7")
     const result = await this.database
       .select()
       .from(products)
       .where(eq(products.id, id))
     const product = result[0]
+    console.log("here6")
+    console.log(product)
     if (!product) {
       return null
     }
@@ -50,6 +54,7 @@ export class DrizzleProductRepository implements ProductRepository {
       ...product,
       recommendedPrice: parseFloat(product.recommendedPrice),
       caseCost: parseFloat(product.caseCost),
+      caseSize: parseFloat(product.caseSize),
     })
   }
 
@@ -60,6 +65,7 @@ export class DrizzleProductRepository implements ProductRepository {
         ...product,
         recommendedPrice: parseFloat(product.recommendedPrice),
         caseCost: parseFloat(product.caseCost),
+        caseSize: parseFloat(product.caseSize),
       })
     )
   }
@@ -76,6 +82,7 @@ export class DrizzleProductRepository implements ProductRepository {
         ...product,
         recommendedPrice: parseFloat(product.recommendedPrice),
         caseCost: parseFloat(product.caseCost),
+        caseSize: parseFloat(product.caseSize),
       })
     )
   }
@@ -90,7 +97,7 @@ export class DrizzleProductRepository implements ProductRepository {
         image: product.image,
         vendorLink: product.vendorLink,
         caseCost: product.caseCost.toString(),
-        caseSize: product.caseSize,
+        caseSize: product.caseSize.toString(),
         shippingAvailable: product.shippingAvailable,
         shippingTimeInDays: product.shippingTimeInDays,
       })
@@ -104,6 +111,7 @@ export class DrizzleProductRepository implements ProductRepository {
       ...updatedProduct,
       recommendedPrice: parseFloat(updatedProduct.recommendedPrice),
       caseCost: parseFloat(updatedProduct.caseCost),
+      caseSize: parseFloat(updatedProduct.caseSize),
     })
   }
 

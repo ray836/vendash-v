@@ -1,7 +1,7 @@
 import { Product } from "../entities/Product"
 import { PublicProductDTO } from "../DTOs/productDTOs"
 export interface ProductRepository {
-  create(product: Product): Promise<Product>
+  create(product: Product): Promise<PublicProductDTO>
   findById(id: string): Promise<Product | null>
   findAll(): Promise<PublicProductDTO[]>
   findByOrganizationId(organizationId: string): Promise<PublicProductDTO[]>

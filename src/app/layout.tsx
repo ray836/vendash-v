@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"
@@ -27,7 +27,11 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <div className="relative flex min-h-screen flex-col">
-            <Header />
+            <div className="w-full border-b">
+              <div className="container mx-auto">
+                <Header />
+              </div>
+            </div>
             <div className="flex-1">{children}</div>
           </div>
         </ThemeProvider>

@@ -1,19 +1,8 @@
-import { CalendarClock, Package } from "lucide-react"
-import Link from "next/link"
-
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
+import { Package } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { OrderItem } from "./order-item"
 import { PastOrderCard } from "./past-order-card"
+import { NextOrderCard } from "./next-order-card"
+
 export default function OrdersPage() {
   // This would typically come from an API or database
   const nextOrderDate = new Date()
@@ -21,28 +10,70 @@ export default function OrdersPage() {
 
   const nextOrderItems = [
     {
-      id: 1,
-      name: "Organic Bananas",
+      id: "1",
+      orderId: "draft-1",
       quantity: 1,
-      price: 3.99,
-      image:
-        "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=200&h=200&q=80&fit=crop",
+      unitPrice: 3.99,
+      product: {
+        id: "prod-1",
+        name: "Organic Bananas",
+        recommendedPrice: 3.99,
+        category: "Produce",
+        image:
+          "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=200&h=200&q=80&fit=crop",
+        vendorLink: "https://vendor.com/bananas",
+        caseCost: 35.99,
+        caseSize: 10,
+        shippingAvailable: true,
+        shippingTimeInDays: 2,
+        organizationId: "1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     },
     {
-      id: 2,
-      name: "Whole Milk",
+      id: "2",
+      orderId: "draft-1",
       quantity: 2,
-      price: 4.5,
-      image:
-        "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=200&h=200&q=80&fit=crop",
+      unitPrice: 4.5,
+      product: {
+        id: "prod-2",
+        name: "Whole Milk",
+        recommendedPrice: 4.5,
+        category: "Dairy",
+        image:
+          "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=200&h=200&q=80&fit=crop",
+        vendorLink: "https://vendor.com/milk",
+        caseCost: 40.5,
+        caseSize: 12,
+        shippingAvailable: true,
+        shippingTimeInDays: 1,
+        organizationId: "1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     },
     {
-      id: 3,
-      name: "Sourdough Bread",
+      id: "3",
+      orderId: "draft-1",
       quantity: 1,
-      price: 5.99,
-      image:
-        "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=200&h=200&q=80&fit=crop",
+      unitPrice: 5.99,
+      product: {
+        id: "prod-3",
+        name: "Sourdough Bread",
+        recommendedPrice: 5.99,
+        category: "Bakery",
+        image:
+          "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=200&h=200&q=80&fit=crop",
+        vendorLink: "https://vendor.com/bread",
+        caseCost: 50.0,
+        caseSize: 10,
+        shippingAvailable: true,
+        shippingTimeInDays: 1,
+        organizationId: "1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     },
   ]
 
@@ -70,11 +101,6 @@ export default function OrdersPage() {
     },
   ]
 
-  const totalNextOrder = nextOrderItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  )
-
   return (
     <div className="container mx-auto py-6 space-y-8">
       <div className="flex flex-col gap-2">
@@ -91,54 +117,10 @@ export default function OrdersPage() {
         </TabsList>
 
         <TabsContent value="upcoming" className="mt-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Next Scheduled Order</CardTitle>
-                  <CardDescription className="mt-2">
-                    <div className="flex items-center text-sm">
-                      <CalendarClock className="mr-2 h-4 w-4" />
-                      Delivery on{" "}
-                      {nextOrderDate.toLocaleDateString("en-US", {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </div>
-                  </CardDescription>
-                </div>
-                <Button variant="outline">Modify Schedule</Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="rounded-lg border">
-                  <div className="p-4 flex items-center justify-between font-medium">
-                    <h3>Items in your next order ({nextOrderItems.length})</h3>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/shop">Add Items</Link>
-                    </Button>
-                  </div>
-                  <Separator />
-                  <div className="p-4 space-y-4">
-                    {nextOrderItems.map((item) => (
-                      <OrderItem key={item.id} item={item} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Subtotal</p>
-                <p className="text-xl font-bold">
-                  ${totalNextOrder.toFixed(2)}
-                </p>
-              </div>
-              <Button>Checkout Now</Button>
-            </CardFooter>
-          </Card>
+          <NextOrderCard
+            nextOrderDate={nextOrderDate}
+            orderItems={nextOrderItems}
+          />
         </TabsContent>
 
         <TabsContent value="past" className="mt-6">

@@ -10,7 +10,13 @@ export class SaveSlotsUseCase {
     private readonly machineRepository: VendingMachineRepository
   ) {}
 
-  async execute(machineId: string, slots: PublicSlotDTO[]): Promise<void> {
+  async execute(
+    machineId: string,
+    slots: PublicSlotDTO[],
+    orgId: string,
+    userId: string,
+    ccReaderId?: string
+  ): Promise<void> {
     try {
       // Get the vending machine to access its cardReaderId
       const machine = await this.machineRepository.getVendingMachine(machineId)
@@ -23,13 +29,14 @@ export class SaveSlotsUseCase {
         (s) =>
           new Slot({
             ...s,
-            cardReaderId: machine.props.cardReaderId,
-            createdBy: "1",
-            updatedBy: "1",
+            cardReaderId: ccReaderId || machine.props.cardReaderId,
+            createdBy: userId,
+            updatedBy: userId,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             id: s.id || randomUUID(),
             sequenceNumber: slots.indexOf(s) + 1,
+            organizationId: orgId,
           })
       )
 

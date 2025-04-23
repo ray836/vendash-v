@@ -3,7 +3,7 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import {
   ArrowDown,
   ArrowUp,
@@ -51,10 +51,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { getOrgProductDataMetrics, getProducts } from "./actions"
 import { Product } from "@/core/domain/entities/Product"
-import { ProductDTO } from "@/core/domain/interfaces/dtos/ProductDTO"
+import { PublicProductDTO } from "@/core/domain/DTOs/productDTOs"
 import { ProductInventory, mockProductInventory } from "./mock-data"
 import { ProductDataMetricsDTO } from "@/core/domain/DTOs/productDataMetricsDTOs"
 import { PublicInventoryDTO } from "@/core/domain/DTOs/inventoryDTOs"
+import { AddProductDialog } from "./add-product"
+import { addProductToNextOrder } from "@/app/web/orders/actions"
+import { toast } from "@/hooks/use-toast"
 
 function InventoryStatusBadge({ status }: { status: string }) {
   if (status === "ok") {
@@ -147,8 +150,10 @@ function SortableTableHeader({
 
 function ProductCard({
   productDataMetrics,
+  onAddToNextOrder,
 }: {
   productDataMetrics: ProductDataMetricsDTO
+  onAddToNextOrder: (productId: string) => Promise<void>
 }) {
   const storagePercentage =
     Math.round(
@@ -263,6 +268,7 @@ function ProductCard({
             <Button
               size="sm"
               variant={productDataMetrics.shouldOrder ? "outline" : "default"}
+              onClick={() => onAddToNextOrder(productDataMetrics.product.id)}
             >
               <PlusCircle className="h-4 w-4 mr-2" />
               Next Order
@@ -283,7 +289,7 @@ export function ProductsInventory() {
     key: "daysUntilStockout",
     direction: "asc",
   })
-  const [products, setProducts] = useState<ProductDTO[]>([])
+  const [products, setProducts] = useState<PublicProductDTO[]>([])
   const [productDataMetrics, setProductDataMetrics] = useState<
     ProductDataMetricsDTO[]
   >([])
@@ -378,13 +384,25 @@ export function ProductsInventory() {
     (p) => p.reorderStatus === "warning"
   ).length
 
+  const refreshProducts = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const productDataMetrics = await getOrgProductDataMetrics("1")
+      setProductDataMetrics(productDataMetrics)
+    } catch (error) {
+      console.error("Failed to refresh products:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     async function fetchProducts() {
       try {
         console.log("fetching products...")
         setError(null)
         const fetchedProducts = await getProducts()
-        setProducts(JSON.parse(fetchedProducts))
+        setProducts(fetchedProducts)
         console.log("fetched products", fetchedProducts)
       } catch (error) {
         setError("Failed to load products")
@@ -400,11 +418,36 @@ export function ProductsInventory() {
     async function fetchProductDataMetrics() {
       const productDataMetrics = await getOrgProductDataMetrics("1")
       console.log("productDataMetrics", productDataMetrics)
-      setProductDataMetrics(JSON.parse(productDataMetrics))
+      setProductDataMetrics(productDataMetrics)
       setIsLoading(false)
     }
     fetchProductDataMetrics()
   }, [])
+
+  const handleAddToNextOrder = async (productId: string) => {
+    try {
+      const result = await addProductToNextOrder(productId)
+
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "Product added to next order",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: result.error || "Failed to add product to order",
+        })
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to add product to order",
+      })
+    }
+  }
 
   if (error) {
     return <div>Error: {error}</div>
@@ -422,10 +465,7 @@ export function ProductsInventory() {
             Manage your product inventory and reordering
           </p>
         </div>
-        <Button>
-          <PlusCircle className="h-4 w-4 mr-2" />
-          Add Product
-        </Button>
+        <AddProductDialog onSuccess={refreshProducts} />
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
@@ -738,6 +778,11 @@ export function ProductsInventory() {
                                   ? "outline"
                                   : "default"
                               }
+                              onClick={() =>
+                                handleAddToNextOrder(
+                                  productDataMetrics.product.id
+                                )
+                              }
                             >
                               <PlusCircle className="h-4 w-4 mr-2" />
                               Next Order
@@ -781,6 +826,7 @@ export function ProductsInventory() {
                 <ProductCard
                   key={productDataMetrics.product.id}
                   productDataMetrics={productDataMetrics}
+                  onAddToNextOrder={handleAddToNextOrder}
                 />
               ))}
             </div>

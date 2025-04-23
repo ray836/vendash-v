@@ -40,6 +40,10 @@ export const slots = pgTable("slots", {
   productId: text("product_id")
     .references(() => products.id)
     .notNull(),
+  organizationId: text("organization_id")
+    .references(() => organizations.id)
+    .default("1")
+    .notNull(),
   labelCode: text("label_code").notNull(),
   ccReaderCode: text("cc_reader_code").default(""),
   cardReaderId: text("card_reader_id").default(""),
@@ -227,3 +231,168 @@ export const RestockMachineData = pgTable("restock_machine_data", {
     .references(() => restockRecords.id)
     .notNull(),
 })
+
+export const orders = pgTable("orders", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .references(() => organizations.id)
+    .notNull(),
+  status: varchar("status", { length: 20 }).notNull(), // 'draft', 'placed', etc.
+  scheduledOrderDate: timestamp("scheduled_order_date"),
+  orderPlacedDate: timestamp("order_placed_date"),
+  taxPaid: decimal("tax_paid", { precision: 10, scale: 2 }),
+  shippingCost: decimal("shipping_cost", { precision: 10, scale: 2 }),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 })
+    .notNull()
+    .default("0.00"),
+  placedBy: text("placed_by")
+    .references(() => users.id)
+    .notNull(),
+  updatedBy: text("updated_by")
+    .references(() => users.id)
+    .notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
+export const orderItems = pgTable("order_items", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id")
+    .references(() => orders.id)
+    .notNull(),
+  productId: text("product_id")
+    .references(() => products.id)
+    .notNull(),
+  quantity: integer("quantity").notNull(),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: text("created_by")
+    .references(() => users.id)
+    .notNull(),
+  updatedBy: text("updated_by")
+    .references(() => users.id)
+    .notNull(),
+})
+
+export const preKits = pgTable("pre_kits", {
+  id: text("id").primaryKey(),
+  machineId: text("machine_id")
+    .references(() => vendingMachines.id)
+    .notNull(),
+  status: text("status").notNull().default("OPEN"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: text("created_by")
+    .references(() => users.id)
+    .notNull(),
+  updatedBy: text("updated_by").references(() => users.id),
+})
+
+export const preKitItems = pgTable("pre_kit_items", {
+  id: text("id").primaryKey(),
+  preKitId: text("pre_kit_id")
+    .references(() => preKits.id)
+    .notNull(),
+  productId: text("product_id")
+    .references(() => products.id)
+    .notNull(),
+  quantity: integer("quantity").notNull(),
+  slotId: text("slot_id")
+    .references(() => slots.id)
+    .notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdBy: text("created_by")
+    .references(() => users.id)
+    .notNull(),
+  updatedBy: text("updated_by")
+    .references(() => users.id)
+    .notNull(),
+})
+
+// Add relations
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [orders.organizationId],
+    references: [organizations.id],
+  }),
+  placedByUser: one(users, {
+    fields: [orders.placedBy],
+    references: [users.id],
+    relationName: "placedByUser",
+  }),
+  updatedByUser: one(users, {
+    fields: [orders.updatedBy],
+    references: [users.id],
+    relationName: "updatedByUser",
+  }),
+  orderItems: many(orderItems),
+}))
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderItems.orderId],
+    references: [orders.id],
+  }),
+  product: one(products, {
+    fields: [orderItems.productId],
+    references: [products.id],
+  }),
+}))
+
+export const organizationsRelations = relations(organizations, ({ many }) => ({
+  orders: many(orders),
+}))
+
+export const usersRelations = relations(users, ({ many }) => ({
+  placedOrders: many(orders, {
+    relationName: "placedByUser",
+  }),
+  updatedOrders: many(orders, {
+    relationName: "updatedByUser",
+  }),
+}))
+
+export const preKitsRelations = relations(preKits, ({ one, many }) => ({
+  vendingMachine: one(vendingMachines, {
+    fields: [preKits.machineId],
+    references: [vendingMachines.id],
+  }),
+  createdByUser: one(users, {
+    fields: [preKits.createdBy],
+    references: [users.id],
+    relationName: "preKitCreatedBy",
+  }),
+  updatedByUser: one(users, {
+    fields: [preKits.updatedBy],
+    references: [users.id],
+    relationName: "preKitUpdatedBy",
+  }),
+  preKitItems: many(preKitItems),
+}))
+
+export const preKitItemsRelations = relations(preKitItems, ({ one }) => ({
+  preKit: one(preKits, {
+    fields: [preKitItems.preKitId],
+    references: [preKits.id],
+  }),
+  product: one(products, {
+    fields: [preKitItems.productId],
+    references: [products.id],
+  }),
+  slot: one(slots, {
+    fields: [preKitItems.slotId],
+    references: [slots.id],
+  }),
+  createdByUser: one(users, {
+    fields: [preKitItems.createdBy],
+    references: [users.id],
+    relationName: "preKitItemCreatedBy",
+  }),
+  updatedByUser: one(users, {
+    fields: [preKitItems.updatedBy],
+    references: [users.id],
+    relationName: "preKitItemUpdatedBy",
+  }),
+}))

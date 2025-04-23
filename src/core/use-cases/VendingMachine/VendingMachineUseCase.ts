@@ -41,6 +41,7 @@ export class VendingMachineUseCase {
     if (!machine) {
       return null
     }
+    console.log("machine1:", machine)
     return BaseVendingMachineDTOToPublicVendingMachineDTO(machine.props)
   }
 

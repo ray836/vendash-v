@@ -38,18 +38,14 @@ export class DrizzleSlotRepository implements SlotRepository {
     }
   }
 
-  async getSlots(machineId: string): Promise<PublicSlotDTO[]> {
+  async getSlots(machineId: string): Promise<Slot[]> {
     const result = await this.database
       .select()
       .from(slots)
       .where(eq(slots.machineId, machineId))
 
     return result.map((slot) => {
-      // Parse row and column from labelCode (e.g., "A-1" -> row: "A", column: 0)
-      const [row, colStr] = slot.labelCode.split("-")
-      const column = parseInt(colStr) - 1 // Convert to 0-based index
-
-      return {
+      return new Slot({
         id: slot.id,
         machineId: slot.machineId,
         productId: slot.productId || "",
@@ -58,9 +54,14 @@ export class DrizzleSlotRepository implements SlotRepository {
         price: slot.price ? parseFloat(slot.price.toString()) : 0,
         capacity: slot.capacity || 10,
         currentQuantity: slot.currentQuantity || 0,
-        row,
-        column,
-      }
+        organizationId: slot.organizationId,
+        cardReaderId: slot.cardReaderId || "",
+        createdAt: slot.createdAt.toISOString(),
+        updatedAt: slot.updatedAt.toISOString(),
+        createdBy: slot.createdBy,
+        updatedBy: slot.updatedBy,
+        sequenceNumber: slot.sequenceNumber,
+      })
     })
   }
 
@@ -93,5 +94,50 @@ export class DrizzleSlotRepository implements SlotRepository {
         productImage: row.products?.image || "",
       }
     })
+  }
+
+  async updateSlot(slot: Slot, userId: string): Promise<void> {
+    console.log("slot", slot)
+    await this.database
+      .update(slots)
+      .set({
+        cardReaderId: slot.props.cardReaderId,
+        updatedAt: new Date(),
+        updatedBy: userId,
+      })
+      .where(eq(slots.id, slot.props.id))
+    console.log("updated slot")
+  }
+
+  async findByOrganizationId(organizationId: string): Promise<Slot[]> {
+    type SlotRow = typeof slots.$inferSelect
+
+    const slotRows = await this.database
+      .select()
+      .from(slots)
+      .where(eq(slots.organizationId, organizationId))
+
+    const slotEntities = slotRows.map((slotRow: SlotRow) => {
+      return new Slot({
+        id: slotRow.id,
+        createdAt: slotRow.createdAt.toISOString(),
+        cardReaderId: slotRow.cardReaderId || "",
+        createdBy: slotRow.createdBy,
+        updatedAt: slotRow.updatedAt.toISOString(),
+        updatedBy: slotRow.updatedBy,
+        machineId: slotRow.machineId,
+        organizationId: slotRow.organizationId,
+        labelCode: slotRow.labelCode,
+        ccReaderCode: slotRow.ccReaderCode || "",
+        price: parseFloat(slotRow.price.toString()),
+        capacity: slotRow.capacity || 10,
+        currentQuantity: slotRow.currentQuantity || 0,
+        productId: slotRow.productId,
+        sequenceNumber: slotRow.sequenceNumber,
+      })
+    })
+
+    console.log("Slots:", slotEntities)
+    return slotEntities
   }
 }

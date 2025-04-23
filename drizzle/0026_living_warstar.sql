@@ -1,0 +1,1 @@
+ALTER TABLE "pre_kits" ADD COLUMN "status" text DEFAULT 'OPEN' NOT NULL;

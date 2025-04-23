@@ -204,7 +204,7 @@ function GridControls({
 
 function SlotGrid({
   slots,
-  selectedProduct, // Used in parent's click handler
+  selectedProduct,
   onSlotClick,
   activeSlot,
   machineType,
@@ -233,7 +233,6 @@ function SlotGrid({
     <div className="space-y-4">
       {Object.entries(slotsByRow).map(([row, rowSlots]) => (
         <div key={row} className="flex items-center gap-4">
-          {/* Slots container - make it grow to fill space */}
           <div
             className="flex-1 grid gap-4"
             style={{
@@ -251,8 +250,6 @@ function SlotGrid({
               />
             ))}
           </div>
-
-          {/* Controls stay the same size */}
           <div className="flex-none">
             <RowControls
               rowLetter={row}
@@ -544,33 +541,25 @@ export function VendingMachineSetup({
   }
 
   const handleSlotClick = (slot: Slot) => {
-    setActiveSlot(slot)
-
-    // If no product is selected, switch to settings tab
+    // If no product is selected, just set active slot and switch to settings tab
     if (!selectedProduct) {
+      setActiveSlot(slot)
       setActiveTab("settings")
-    } else {
-      // Existing product assignment logic
-      const updatedSlot = {
-        ...slot,
-        productId: selectedProduct.id,
-        price: selectedProduct.recommendedPrice,
-      }
-      updateSlot(updatedSlot)
-      setSelectedProduct(null)
+      return
     }
-  }
 
-  const updateSlot = (updates: Partial<Slot>) => {
-    if (!activeSlot) return
-    setSlots(
-      slots.map((s) => (s.id === activeSlot.id ? { ...s, ...updates } : s))
-    )
-    if (updates.productId === null) {
-      setActiveSlot(null)
-    } else {
-      setActiveSlot((prev) => (prev ? { ...prev, ...updates } : null))
+    // If a product is selected, update the slot with the product
+    const updatedSlot = {
+      ...slot,
+      productId: selectedProduct.id,
+      price: selectedProduct.recommendedPrice,
     }
+
+    // Update the slots array with the new slot
+    setSlots(slots.map((s) => (s.id === slot.id ? updatedSlot : s)))
+
+    // Update active slot
+    setActiveSlot(updatedSlot)
   }
 
   // Grid manipulation functions
@@ -729,7 +718,11 @@ export function VendingMachineSetup({
         })),
       }
 
-      const result = await saveSlots(machineId, configuration.slots)
+      const result = await saveSlots(
+        machineId,
+        configuration.slots,
+        machine.cardReaderId
+      )
 
       if (result.success) {
         // Show success message or handle success case
@@ -741,6 +734,19 @@ export function VendingMachineSetup({
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleSlotUpdate = (updates: Partial<Slot>) => {
+    if (!activeSlot) return
+
+    setSlots(
+      slots.map((slot) =>
+        slot.id === activeSlot.id ? { ...slot, ...updates } : slot
+      )
+    )
+
+    // Also update the active slot
+    setActiveSlot({ ...activeSlot, ...updates })
   }
 
   return (
@@ -773,7 +779,7 @@ export function VendingMachineSetup({
                 </div>
                 <MachineSettings
                   machine={machine}
-                  onUpdate={async (cardReaderId) => {
+                  onUpdate={async (cardReaderId: string) => {
                     await updateMachine(machineId, { cardReaderId })
                     const updatedMachine = await getMachine(machineId)
                     setMachine(updatedMachine)
@@ -852,7 +858,7 @@ export function VendingMachineSetup({
                   <CardTitle>Available Products</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[1000px]">
+                  <ScrollArea className="h-[1300px]">
                     <div className="grid grid-cols-2 gap-2">
                       {availableProducts.map((product) => (
                         <TooltipProvider key={product.id}>
@@ -906,7 +912,7 @@ export function VendingMachineSetup({
                 {activeSlot ? (
                   <SlotSettings
                     slot={activeSlot}
-                    onUpdate={updateSlot}
+                    onUpdate={handleSlotUpdate}
                     orgProducts={products}
                   />
                 ) : (
@@ -931,8 +937,8 @@ function MachineSettings({
   onUpdate: (cardReaderId: string) => Promise<void>
 }) {
   const { toast } = useToast()
-  const [cardReaderId, setCardReaderId] = useState(machine.cardReaderId)
   const [isSaving, setIsSaving] = useState(false)
+  const [cardReaderId, setCardReaderId] = useState(machine.cardReaderId || "")
 
   const handleSave = async () => {
     try {
@@ -964,6 +970,7 @@ function MachineSettings({
             onChange={(e) => setCardReaderId(e.target.value)}
             placeholder="Enter card reader ID"
           />
+          <span>{machine.cardReaderId} here</span>
           <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save"}
           </Button>

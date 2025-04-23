@@ -4,6 +4,9 @@ export const BaseSlotDTO = z.object({
   id: z.string({
     required_error: "id is required",
   }),
+  organizationId: z.string({
+    required_error: "organizationId is required",
+  }),
   machineId: z.string({
     required_error: "machineId is required",
   }),
