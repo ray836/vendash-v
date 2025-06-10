@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   BarChart3,
@@ -36,6 +36,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { getTransactionGraphData } from "./actions"
+import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
+import { formatDateLabel, formatWeekRangeLabel } from "@/utils/date"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 // Sample dashboard data - in a real app, this would come from your backend
 const dashboardData = {
@@ -222,22 +231,11 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // First, define proper types for the sales data
-type DailySales = {
-  day: string
-  sales: number
+type SalesData = {
+  date: string
+  totalSales: number
+  totalTransactions: number
 }
-
-type WeeklySales = {
-  week: string
-  sales: number
-}
-
-type MonthlySales = {
-  month: string
-  sales: number
-}
-
-type SalesData = DailySales | WeeklySales | MonthlySales
 
 // Update the component to properly type check
 function SalesChart({
@@ -245,37 +243,61 @@ function SalesChart({
   period,
 }: {
   data: SalesData[]
-  period: "daily" | "weekly" | "monthly"
+  period: GroupByType
 }) {
-  // Helper function to type guard the data
-  const getLabel = (item: SalesData) => {
-    if (period === "daily" && "day" in item) {
-      return item.day
-    }
-    if (period === "weekly" && "week" in item) {
-      return item.week
-    }
-    if (period === "monthly" && "month" in item) {
-      return item.month
-    }
-    return ""
-  }
-
-  const maxSales = Math.max(...data.map((item) => item.sales))
+  const maxSales = Math.max(...data.map((item) => item.totalSales))
 
   return (
     <div className="h-[200px] flex items-end gap-2">
       {data.map((item, i) => {
-        const height = (item.sales / maxSales) * 100
+        const height = (item.totalSales / maxSales) * 200 // 200px container height
+        const date = new Date(item.date)
+        const dayOfWeek = date.toLocaleString("default", { weekday: "short" })
+
         return (
-          <div key={i} className="flex-1 flex flex-col items-center gap-2">
-            <div
-              className="w-full bg-primary/80 hover:bg-primary rounded-t-sm transition-colors"
-              style={{ height: `${height}%` }}
-            />
-            <span className="text-xs text-muted-foreground">
-              {getLabel(item)}
-            </span>
+          <div
+            key={i}
+            className="flex-1 flex flex-col justify-end items-center h-[220px]"
+          >
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    className="w-full bg-green-500 hover:bg-primary rounded-t-sm transition-colors mb-3 cursor-pointer"
+                    style={{ height: `${height}px` }}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div>
+                    <div className="font-semibold">
+                      {formatDateLabel(item.date, period)} ({dayOfWeek})
+                    </div>
+                    <div>
+                      Sales:{" "}
+                      <span className="font-bold">${item.totalSales}</span>
+                    </div>
+                    <div>
+                      Transactions:{" "}
+                      <span className="font-bold">
+                        {item.totalTransactions}
+                      </span>
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <div className="flex flex-col items-center">
+              <span className="text-xs text-muted-foreground">
+                {period === GroupByType.WEEK
+                  ? formatWeekRangeLabel(item.date)
+                  : formatDateLabel(item.date, period)}
+              </span>
+              {period === GroupByType.DAY && (
+                <span className="text-[10px] text-muted-foreground/60">
+                  {dayOfWeek}
+                </span>
+              )}
+            </div>
           </div>
         )
       })}
@@ -299,9 +321,24 @@ function ActivityIcon({ type }: { type: string }) {
 }
 
 export function Dashboard() {
-  const [salesPeriod, setSalesPeriod] = useState<
-    "daily" | "weekly" | "monthly"
-  >("daily")
+  const [salesPeriod, setSalesPeriod] = useState<GroupByType>(GroupByType.DAY)
+  const [salesData, setSalesData] = useState<SalesData[]>([])
+  const [loading, setLoading] = useState(false)
+  const [totalSales, setTotalSales] = useState(0)
+  const [averageSales, setAverageSales] = useState(0)
+
+  useEffect(() => {
+    setLoading(true)
+    getTransactionGraphData(salesPeriod)
+      .then((res) => {
+        if (res.success && res.data) {
+          setSalesData(res.data.groupedData)
+          setTotalSales(res.data.totalSales)
+          setAverageSales(res.data.averageSales)
+        }
+      })
+      .finally(() => setLoading(false))
+  }, [salesPeriod])
 
   return (
     <div className="space-y-6">
@@ -334,7 +371,12 @@ export function Dashboard() {
             <div className="flex items-center">
               <DollarSign className="h-5 w-5 mr-2 text-primary" />
               <span className="text-2xl font-bold">
-                {dashboardData.summary.totalRevenue}
+                {loading
+                  ? "$0.00"
+                  : `$${totalSales.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -422,67 +464,61 @@ export function Dashboard() {
               <CardTitle>Sales Overview</CardTitle>
               <Select
                 value={salesPeriod}
-                onValueChange={(value: "daily" | "weekly" | "monthly") =>
-                  setSalesPeriod(value)
-                }
+                onValueChange={(value: GroupByType) => setSalesPeriod(value)}
               >
                 <SelectTrigger className="w-[120px]">
                   <SelectValue placeholder="Select period" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="Monthly">Monthly</SelectItem>
+                  <SelectItem value={GroupByType.DAY}>Daily</SelectItem>
+                  <SelectItem value={GroupByType.WEEK}>Weekly</SelectItem>
+                  <SelectItem value={GroupByType.MONTH}>Monthly</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <CardDescription>
-              {salesPeriod === "daily"
-                ? "Last 7 days"
-                : salesPeriod === "weekly"
-                ? "Last 4 weeks"
-                : "Last 12 months"}{" "}
-              sales performance
+            <CardDescription className="mb-4">
+              {salesPeriod === GroupByType.DAY
+                ? "Last 30 days sales performance"
+                : salesPeriod === GroupByType.WEEK
+                ? "Last 12 weeks sales performance"
+                : "Last 12 months sales performance"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SalesChart
-              data={
-                salesPeriod === "daily"
-                  ? dashboardData.salesData.daily
-                  : salesPeriod === "weekly"
-                  ? dashboardData.salesData.weekly
-                  : dashboardData.salesData.monthly
-              }
-              period={salesPeriod}
-            />
+            {loading ? (
+              <div>Loading...</div>
+            ) : (
+              <SalesChart data={salesData} period={salesPeriod} />
+            )}
           </CardContent>
           <CardFooter className="flex justify-between border-t pt-4">
             <div>
               <p className="text-sm font-medium">Total Revenue</p>
               <p className="text-2xl font-bold">
-                {salesPeriod === "daily"
-                  ? dashboardData.summary.weeklyRevenue
-                  : salesPeriod === "weekly"
-                  ? dashboardData.summary.monthlyRevenue
-                  : "$145,250.00"}
+                {loading
+                  ? "$0.00"
+                  : `$${totalSales.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`}
               </p>
             </div>
             <div>
               <p className="text-sm font-medium">
                 Average{" "}
-                {salesPeriod === "daily"
+                {salesPeriod === GroupByType.DAY
                   ? "Daily"
-                  : salesPeriod === "weekly"
+                  : salesPeriod === GroupByType.WEEK
                   ? "Weekly"
                   : "Monthly"}
               </p>
               <p className="text-2xl font-bold">
-                {salesPeriod === "daily"
-                  ? dashboardData.summary.dailyRevenue
-                  : salesPeriod === "weekly"
-                  ? "$2,190.56"
-                  : "$12,104.17"}
+                {loading
+                  ? "$0.00"
+                  : `$${averageSales.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`}
               </p>
             </div>
             <Button variant="outline" size="sm">

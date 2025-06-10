@@ -1,6 +1,6 @@
 import { Minus, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { PublicOrderItemResponseDTO } from "@/core/domain/DTOs/OrderDTOs"
+import { PublicOrderItemResponseDTO } from "@/domains/Order/schemas/orderDTOs"
 import { Checkbox } from "@/components/ui/checkbox"
 
 interface OrderItemProps {

@@ -25,7 +25,7 @@ import {
   PublicOrderItemResponseDTO,
   PublicOrderDTO,
   PlaceCurrentOrderRequestDTO,
-} from "@/core/domain/DTOs/OrderDTOs"
+} from "@/domains/Order/schemas/orderDTOs"
 
 interface NextOrderCardProps {
   nextOrderDate?: Date // Make this optional since we'll get it from the order
@@ -185,7 +185,11 @@ export function NextOrderCard({ nextOrderDate }: NextOrderCardProps) {
           title: "Success",
           description: "Order placed successfully",
         })
-        // Redirect to order confirmation or orders list
+        // Refresh the order data after successful placement
+        await fetchCurrentOrder()
+        // Reset review mode and selected items
+        setIsReviewMode(false)
+        setSelectedItems(new Set())
       } else {
         toast({
           variant: "destructive",

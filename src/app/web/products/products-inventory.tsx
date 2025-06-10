@@ -49,15 +49,12 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
-import { getOrgProductDataMetrics, getProducts } from "./actions"
-import { Product } from "@/core/domain/entities/Product"
-import { PublicProductDTO } from "@/core/domain/DTOs/productDTOs"
-import { ProductInventory, mockProductInventory } from "./mock-data"
-import { ProductDataMetricsDTO } from "@/core/domain/DTOs/productDataMetricsDTOs"
-import { PublicInventoryDTO } from "@/core/domain/DTOs/inventoryDTOs"
-import { AddProductDialog } from "./add-product"
-import { addProductToNextOrder } from "@/app/web/orders/actions"
+import { getOrgProductDataMetrics } from "./actions"
+import { mockProductInventory } from "./mock-data"
 import { toast } from "@/hooks/use-toast"
+import { PublicProductWithInventorySalesOrderDataDTO } from "@/domains/Product/schemas/ProductSchemas"
+import { addProductToNextOrder } from "@/app/web/orders/actions"
+import { AddProductDialog } from "./add-product"
 
 function InventoryStatusBadge({ status }: { status: string }) {
   if (status === "ok") {
@@ -152,7 +149,7 @@ function ProductCard({
   productDataMetrics,
   onAddToNextOrder,
 }: {
-  productDataMetrics: ProductDataMetricsDTO
+  productDataMetrics: PublicProductWithInventorySalesOrderDataDTO
   onAddToNextOrder: (productId: string) => Promise<void>
 }) {
   const storagePercentage =
@@ -194,7 +191,9 @@ function ProductCard({
             </div>
           </div>
           <InventoryStatusBadge
-            status={productDataMetrics.shouldOrder ? "critical" : "ok"}
+            status={
+              productDataMetrics.orderStatus.shouldOrder ? "critical" : "ok"
+            }
           />
         </div>
       </CardHeader>
@@ -227,10 +226,10 @@ function ProductCard({
             <span className="text-xs text-muted-foreground">Daily Sales</span>
             <div className="flex items-center gap-1">
               <SalesTrendIndicator
-                trend={productDataMetrics.trend > 1 ? "up" : "down"}
+                trend={productDataMetrics.salesData.trend > 1 ? "up" : "down"}
               />
               <span className="text-sm">
-                {productDataMetrics.averageDailySales}/day
+                {productDataMetrics.salesData.averageDailySales}/day
               </span>
             </div>
           </div>
@@ -239,7 +238,9 @@ function ProductCard({
               Sales Velocity
             </span>
             <SalesVelocityBadge
-              velocity={productDataMetrics.salesVelocity > 1 ? "high" : "low"}
+              velocity={
+                productDataMetrics.salesData.salesVelocity > 1 ? "high" : "low"
+              }
             />
           </div>
         </div>
@@ -249,14 +250,14 @@ function ProductCard({
             <span className="text-muted-foreground mr-1">Days left:</span>
             <span
               className={
-                productDataMetrics.daysToSellOut <= 3
+                productDataMetrics.salesData.daysToSellOut <= 3
                   ? "text-red-600 font-medium"
-                  : productDataMetrics.daysToSellOut <= 7
+                  : productDataMetrics.salesData.daysToSellOut <= 7
                   ? "text-yellow-600"
                   : ""
               }
             >
-              {productDataMetrics.daysToSellOut}
+              {productDataMetrics.salesData.daysToSellOut}
             </span>
           </div>
           <div className="flex gap-2">
@@ -267,7 +268,11 @@ function ProductCard({
             </Link>
             <Button
               size="sm"
-              variant={productDataMetrics.shouldOrder ? "outline" : "default"}
+              variant={
+                productDataMetrics.orderStatus.shouldOrder
+                  ? "outline"
+                  : "default"
+              }
               onClick={() => onAddToNextOrder(productDataMetrics.product.id)}
             >
               <PlusCircle className="h-4 w-4 mr-2" />
@@ -284,53 +289,36 @@ export function ProductsInventory() {
   const [searchQuery, setSearchQuery] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
-  // Changed default sort to days until stockout, ascending (lowest first)
   const [sort, setSort] = useState<{ key: string; direction: "asc" | "desc" }>({
-    key: "daysUntilStockout",
+    key: "salesData.daysToSellOut",
     direction: "asc",
   })
-  const [products, setProducts] = useState<PublicProductDTO[]>([])
   const [productDataMetrics, setProductDataMetrics] = useState<
-    ProductDataMetricsDTO[]
+    PublicProductWithInventorySalesOrderDataDTO[]
   >([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Update the NestedValue type and add a type guard
   type NestedValue = string | number | null | Record<string, unknown>
 
-  const getNestedValue = (
-    obj: ProductDataMetricsDTO,
-    path: string
-  ): string | number | null => {
-    const result = path.split(".").reduce<NestedValue>((prev, curr) => {
-      if (!prev || typeof prev !== "object") return null
-      return prev[curr as keyof typeof prev] as NestedValue
-    }, obj as unknown as Record<string, unknown>) // First cast to unknown, then to Record
-
-    // Type guard to ensure we only return string | number | null
-    if (
-      typeof result === "string" ||
-      typeof result === "number" ||
-      result === null
-    ) {
-      return result
-    }
-    return null
+  const getNestedValue = (obj: any, path: string): NestedValue => {
+    const value = path.split(".").reduce((current, key) => {
+      return current && typeof current === "object" ? current[key] : null
+    }, obj)
+    console.log(`Getting value for path ${path}:`, value)
+    return value
   }
 
-  // Update the sort function to handle the comparison properly
-  const handleSort = (key: keyof ProductInventory | string) => {
-    setSort((prev) => ({
+  const handleSort = (key: string) => {
+    setSort((current) => ({
       key,
-      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
+      direction:
+        current.key === key && current.direction === "asc" ? "desc" : "asc",
     }))
   }
 
-  // Filter products based on search query and filters
   const filteredProducts = productDataMetrics
     .filter((productDataMetrics) => {
-      // Search filter
       if (
         searchQuery &&
         !productDataMetrics.product.name
@@ -340,7 +328,6 @@ export function ProductsInventory() {
         return false
       }
 
-      // Category filter
       if (
         categoryFilter !== "all" &&
         productDataMetrics.product.category !== categoryFilter
@@ -348,8 +335,10 @@ export function ProductsInventory() {
         return false
       }
 
-      // Status filter
-      if (statusFilter !== "all" && productDataMetrics.shouldOrder) {
+      if (
+        statusFilter !== "all" &&
+        productDataMetrics.orderStatus.shouldOrder
+      ) {
         return false
       }
 
@@ -359,7 +348,18 @@ export function ProductsInventory() {
       const aValue = getNestedValue(a, sort.key)
       const bValue = getNestedValue(b, sort.key)
 
-      if (!aValue || !bValue) return 0
+      console.log(
+        `Comparing ${a.product.name} (${aValue}) with ${b.product.name} (${bValue})`
+      )
+
+      if (aValue === null || bValue === null) return 0
+
+      // Handle numeric comparison for daysToSellOut
+      if (sort.key === "salesData.daysToSellOut") {
+        const numA = Number(aValue)
+        const numB = Number(bValue)
+        return sort.direction === "asc" ? numA - numB : numB - numA
+      }
 
       // Handle string comparison
       if (typeof aValue === "string" && typeof bValue === "string") {
@@ -376,7 +376,6 @@ export function ProductsInventory() {
       return 0
     })
 
-  // Get counts for filter badges
   const criticalCount = mockProductInventory.filter(
     (p) => p.reorderStatus === "critical"
   ).length
@@ -397,24 +396,6 @@ export function ProductsInventory() {
   }, [])
 
   useEffect(() => {
-    async function fetchProducts() {
-      try {
-        console.log("fetching products...")
-        setError(null)
-        const fetchedProducts = await getProducts()
-        setProducts(fetchedProducts)
-        console.log("fetched products", fetchedProducts)
-      } catch (error) {
-        setError("Failed to load products")
-        console.error("Failed to fetch products:", error)
-      } finally {
-      }
-    }
-    console.log("products", products)
-    console.log("testtttttt")
-
-    fetchProducts()
-
     async function fetchProductDataMetrics() {
       const productDataMetrics = await getOrgProductDataMetrics("1")
       console.log("productDataMetrics", productDataMetrics)
@@ -453,7 +434,6 @@ export function ProductsInventory() {
     return <div>Error: {error}</div>
   }
 
-  // Use mockProductInventory for now while we transition to real data
   const displayData = isLoading ? mockProductInventory : productDataMetrics
 
   return (
@@ -585,14 +565,14 @@ export function ProductsInventory() {
                 <TableHeader>
                   <TableRow>
                     <SortableTableHeader
-                      sortKey="name"
+                      sortKey="product.name"
                       currentSort={sort}
                       onSort={handleSort}
                     >
                       Product
                     </SortableTableHeader>
                     <SortableTableHeader
-                      sortKey="category"
+                      sortKey="product.category"
                       currentSort={sort}
                       onSort={handleSort}
                       className="hidden md:table-cell"
@@ -623,21 +603,21 @@ export function ProductsInventory() {
                       In Machines
                     </SortableTableHeader>
                     <SortableTableHeader
-                      sortKey="sales.daily"
+                      sortKey="salesData.averageDailySales"
                       currentSort={sort}
                       onSort={handleSort}
                     >
                       Daily Sales
                     </SortableTableHeader>
                     <SortableTableHeader
-                      sortKey="sales.velocityRank"
+                      sortKey="salesData.salesVelocity"
                       currentSort={sort}
                       onSort={handleSort}
                     >
                       Sales Velocity
                     </SortableTableHeader>
                     <SortableTableHeader
-                      sortKey="daysUntilStockout"
+                      sortKey="salesData.daysToSellOut"
                       currentSort={sort}
                       onSort={handleSort}
                       className="hidden md:table-cell"
@@ -645,7 +625,7 @@ export function ProductsInventory() {
                       Days Left
                     </SortableTableHeader>
                     <SortableTableHeader
-                      sortKey="reorderStatus"
+                      sortKey="orderStatus.shouldOrder"
                       currentSort={sort}
                       onSort={handleSort}
                     >
@@ -695,9 +675,10 @@ export function ProductsInventory() {
                             <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
                               <div
                                 className={`h-full ${
-                                  productDataMetrics.shouldOrder
+                                  productDataMetrics.orderStatus.shouldOrder
                                     ? "bg-red-500"
-                                    : productDataMetrics.isOnNextOrder
+                                    : productDataMetrics.orderStatus
+                                        .isOnNextOrder
                                     ? "bg-yellow-500"
                                     : "bg-green-500"
                                 }`}
@@ -725,18 +706,21 @@ export function ProductsInventory() {
                           <div className="flex items-center gap-1">
                             <SalesTrendIndicator
                               trend={
-                                productDataMetrics.trend > 1 ? "up" : "down"
+                                productDataMetrics.salesData.trend > 1
+                                  ? "up"
+                                  : "down"
                               }
                             />
                             <span>
-                              {productDataMetrics.averageDailySales}/day
+                              {productDataMetrics.salesData.averageDailySales}
+                              /day
                             </span>
                           </div>
                         </TableCell>
                         <TableCell>
                           <SalesVelocityBadge
                             velocity={
-                              productDataMetrics.salesVelocity > 1
+                              productDataMetrics.salesData.salesVelocity > 1
                                 ? "high"
                                 : "low"
                             }
@@ -745,20 +729,23 @@ export function ProductsInventory() {
                         <TableCell className="hidden md:table-cell">
                           <span
                             className={
-                              productDataMetrics.daysToSellOut <= 3
+                              productDataMetrics.salesData.daysToSellOut <= 3
                                 ? "text-red-600 font-medium"
-                                : productDataMetrics.daysToSellOut <= 7
+                                : productDataMetrics.salesData.daysToSellOut <=
+                                  7
                                 ? "text-yellow-600"
                                 : ""
                             }
                           >
-                            {productDataMetrics.daysToSellOut} days
+                            {productDataMetrics.salesData.daysToSellOut} days
                           </span>
                         </TableCell>
                         <TableCell>
                           <InventoryStatusBadge
                             status={
-                              productDataMetrics.shouldOrder ? "critical" : "ok"
+                              productDataMetrics.orderStatus.shouldOrder
+                                ? "critical"
+                                : "ok"
                             }
                           />
                         </TableCell>
@@ -774,7 +761,7 @@ export function ProductsInventory() {
                             <Button
                               size="sm"
                               variant={
-                                productDataMetrics.shouldOrder
+                                productDataMetrics.orderStatus.shouldOrder
                                   ? "outline"
                                   : "default"
                               }

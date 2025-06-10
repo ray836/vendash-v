@@ -16,21 +16,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { UserDTO } from "@/core/domain/interfaces/dtos/UserDTO"
+import { PublicUserDTO } from "@/domains/User/schemas/UserSchemas"
 import { useState, useEffect } from "react"
 import { createUser, deleteUser, getUsers } from "./actions"
 import { Plus, Save, Trash2 } from "lucide-react"
+import { UserRole } from "@/domains/User/entities/User"
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<UserDTO[]>([])
+  const [users, setUsers] = useState<PublicUserDTO[]>([])
   const [isAddingUser, setIsAddingUser] = useState(false)
   const [newUser, setNewUser] = useState<
-    Omit<UserDTO, "id" | "organizationId">
+    Omit<PublicUserDTO, "id" | "organizationId">
   >({
     firstName: "",
     lastName: "",
     email: "",
-    role: "user",
+    role: UserRole.USER,
   })
 
   useEffect(() => {
@@ -49,10 +50,10 @@ export default function UsersPage() {
     // TODO: Implement save functionality
     setIsAddingUser(false)
     console.log("handleSave", newUser)
-    const user = (await createUser(newUser)) as unknown as UserDTO
+    const user = (await createUser(newUser)) as unknown as PublicUserDTO
     console.log("user", user)
     setUsers([...users, user])
-    setNewUser({ firstName: "", lastName: "", email: "", role: "user" })
+    setNewUser({ firstName: "", lastName: "", email: "", role: UserRole.USER })
   }
 
   const handleDelete = async (userId: string) => {
@@ -128,15 +129,15 @@ export default function UsersPage() {
                   <Select
                     value={newUser.role}
                     onValueChange={(value) =>
-                      setNewUser({ ...newUser, role: value })
+                      setNewUser({ ...newUser, role: value as UserRole })
                     }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value={UserRole.USER}>User</SelectItem>
+                      <SelectItem value={UserRole.ADMIN}>Admin</SelectItem>
                     </SelectContent>
                   </Select>
                 </TableCell>

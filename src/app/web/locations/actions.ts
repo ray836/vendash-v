@@ -1,15 +1,17 @@
 "use server"
 
+import { CreateLocationUseCase } from "@/domains/Location/use-cases/CreateLocationUseCase"
+import { DeleteLocationUseCase } from "@/domains/Location/use-cases/DeleteLocationUseCase"
+import { GetLocationsUseCase } from "@/domains/Location/use-cases/GetLocationsUseCase"
 import { db } from "@/infrastructure/database"
-import { locations } from "@/infrastructure/database/schema"
-import { eq } from "drizzle-orm"
-import { DrizzleLocationRepo } from "@/infrastructure/repositories/drizzle-LocationRepo"
-import { LocationUseCase } from "@/core/use-cases/Location/LocationUserCase"
-import { CreateLocationDTO } from "@/core/use-cases/Location/dtos/CreateLocationDTO"
+import { DrizzleLocationRepository } from "@/infrastructure/repositories/DrizzleLocationRepository"
+
+const organizationId = "1"
+
 export async function getLocations(): Promise<string> {
-  const drizzleLocationRepo = new DrizzleLocationRepo(db)
-  const locationUseCase = new LocationUseCase(drizzleLocationRepo)
-  const locations = await locationUseCase.getLocations("1")
+  const drizzleLocationRepository = new DrizzleLocationRepository(db)
+  const getLocationsUseCase = new GetLocationsUseCase(drizzleLocationRepository)
+  const locations = await getLocationsUseCase.execute(organizationId)
   return JSON.stringify(locations)
 }
 
@@ -17,20 +19,22 @@ export async function createLocation(location: {
   name: string
   address: string
 }): Promise<string> {
-  // TODO: Get organizationId from session
-  const organizationId = "1" // Temporary
-  const createLocationDTO = new CreateLocationDTO(
-    location.name,
-    location.address,
-    organizationId
+  const drizzleLocationRepository = new DrizzleLocationRepository(db)
+  const createLocationUseCase = new CreateLocationUseCase(
+    drizzleLocationRepository
   )
-
-  const drizzleLocationRepo = new DrizzleLocationRepo(db)
-  const locationUseCase = new LocationUseCase(drizzleLocationRepo)
-  const result = await locationUseCase.createLocation(createLocationDTO)
+  const result = await createLocationUseCase.execute({
+    name: location.name,
+    address: location.address,
+    organizationId: organizationId,
+  })
   return JSON.stringify(result)
 }
 
 export async function deleteLocation(id: string): Promise<void> {
-  await db.delete(locations).where(eq(locations.id, id))
+  const drizzleLocationRepository = new DrizzleLocationRepository(db)
+  const deleteLocationUseCase = new DeleteLocationUseCase(
+    drizzleLocationRepository
+  )
+  await deleteLocationUseCase.execute(id)
 }

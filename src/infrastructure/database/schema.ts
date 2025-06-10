@@ -280,7 +280,7 @@ export const preKits = pgTable("pre_kits", {
   machineId: text("machine_id")
     .references(() => vendingMachines.id)
     .notNull(),
-  status: text("status").notNull().default("OPEN"),
+  status: varchar("status", { length: 20 }).notNull().default("OPEN"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   createdBy: text("created_by")

@@ -17,7 +17,7 @@ export default async function MachineSetupPage({
           machineId={id}
           products={orgProducts}
           initialSlots={machineData.slots}
-          machineType={machineData.machine.type}
+          machineType={machineData.type}
         />
       </Suspense>
     </main>

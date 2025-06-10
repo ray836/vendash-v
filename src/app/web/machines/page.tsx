@@ -158,12 +158,9 @@ function VendingMachineCard({ machine }: { machine: VendingMachine }) {
         </div>
       </CardContent>
       <CardFooter className="flex justify-between pt-2">
-        <Link href={`/web/machines/${machine.id}`}>
-          <Button variant="outline" size="sm">
-            Details
-          </Button>
+        <Link href={`/web/machines/${machine.id}/manage`}>
+          <Button size="sm">Manage</Button>
         </Link>
-        <Button size="sm">Manage</Button>
       </CardFooter>
     </Card>
   )

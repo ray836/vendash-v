@@ -41,290 +41,37 @@ import {
 import { SalesTableSkeleton } from "./sales-table-skeleton"
 import { SalesStats } from "./sales-stats"
 import { getOrgTransactions } from "./actions"
-import { PublicTransactionDataDTO } from "@/core/domain/DTOs/transactionDTOs"
+import { PublicTransactionWithItemsAndProductDTO } from "@/domains/Transaction/schemas/TransactionSchemas"
 
-interface Product {
-  id: string
-  name: string
-  image: string
-  price: number
-}
+// interface Product {
+//   id: string
+//   name: string
+//   image: string
+//   price: number
+// }
 
-interface TransactionItem {
-  product: Product
-  quantity: number
-  price: number // Price at time of purchase
-}
+// interface TransactionItem {
+//   product: Product
+//   quantity: number
+//   price: number // Price at time of purchase
+// }
 
-interface Transaction {
-  id: string
-  date: string
-  vendingMachine: {
-    id: string
-    location: string
-  }
-  items: TransactionItem[]
-  totalAmount: number
-  paymentMethod: string
-  status: "Completed" | "Processing" | "Refunded"
-}
+// interface Transaction {
+//   id: string
+//   date: string
+//   vendingMachine: {
+//     id: string
+//     location: string
+//   }
+//   items: TransactionItem[]
+//   totalAmount: number
+//   paymentMethod: string
+//   status: "Completed" | "Processing" | "Refunded"
+// }
 
-// Mock data for the sales table
-const salesData: Transaction[] = [
-  {
-    id: "TXN-001-28492",
-    date: "2023-03-15T14:32:00",
-    vendingMachine: {
-      id: "VM-001",
-      location: "Main Street Mall",
-    },
-    items: [
-      {
-        product: {
-          id: "P1",
-          name: "Organic Bananas",
-          image:
-            "https://images.unsplash.com/photo-1603833665858-e61d17a86224?w=100&h=100&q=80&fit=crop",
-          price: 3.99,
-        },
-        quantity: 2,
-        price: 3.99,
-      },
-      {
-        product: {
-          id: "P2",
-          name: "Trail Mix",
-          image:
-            "https://images.unsplash.com/photo-1604215707327-57f886e8d9d3?w=100&h=100&q=80&fit=crop",
-          price: 2.5,
-        },
-        quantity: 1,
-        price: 2.5,
-      },
-    ],
-    totalAmount: 10.48,
-    paymentMethod: "Credit Card",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001-28493",
-    date: "2023-03-15T15:45:00",
-    vendingMachine: {
-      id: "VM-002",
-      location: "Central Station",
-    },
-    items: [
-      {
-        product: {
-          id: "P3",
-          name: "Whole Milk",
-          image:
-            "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=100&h=100&q=80&fit=crop",
-          price: 4.5,
-        },
-        quantity: 1,
-        price: 4.5,
-      },
-    ],
-    totalAmount: 4.5,
-    paymentMethod: "Mobile Pay",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001-28494",
-    date: "2023-03-15T16:20:00",
-    vendingMachine: {
-      id: "VM-003",
-      location: "Downtown Office",
-    },
-    items: [
-      {
-        product: {
-          id: "P4",
-          name: "Sourdough Bread",
-          image:
-            "https://images.unsplash.com/photo-1585478259715-4ddc6572944d?w=100&h=100&q=80&fit=crop",
-          price: 5.99,
-        },
-        quantity: 1,
-        price: 5.99,
-      },
-    ],
-    totalAmount: 5.99,
-    paymentMethod: "Credit Card",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001-28495",
-    date: "2023-03-15T17:05:00",
-    vendingMachine: {
-      id: "VM-001",
-      location: "Main Street Mall",
-    },
-    items: [
-      {
-        product: {
-          id: "P5",
-          name: "Organic Eggs",
-          image:
-            "https://images.unsplash.com/photo-1598965675045-45c7c640ef0c?w=100&h=100&q=80&fit=crop",
-          price: 6.49,
-        },
-        quantity: 1,
-        price: 6.49,
-      },
-    ],
-    totalAmount: 6.49,
-    paymentMethod: "Cash",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001-28496",
-    date: "2023-03-16T09:15:00",
-    vendingMachine: {
-      id: "VM-004",
-      location: "University Campus",
-    },
-    items: [
-      {
-        product: {
-          id: "P6",
-          name: "Fresh Apples",
-          image:
-            "https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a?w=100&h=100&q=80&fit=crop",
-          price: 4.25,
-        },
-        quantity: 1,
-        price: 4.25,
-      },
-    ],
-    totalAmount: 4.25,
-    paymentMethod: "Mobile Pay",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001-28497",
-    date: "2023-03-16T10:30:00",
-    vendingMachine: {
-      id: "VM-002",
-      location: "Central Station",
-    },
-    items: [
-      {
-        product: {
-          id: "P7",
-          name: "Protein Bars",
-          image:
-            "https://images.unsplash.com/photo-1622484212850-eb596d769edc?w=100&h=100&q=80&fit=crop",
-          price: 3.5,
-        },
-        quantity: 1,
-        price: 3.5,
-      },
-    ],
-    totalAmount: 3.5,
-    paymentMethod: "Credit Card",
-    status: "Refunded",
-  },
-  {
-    id: "TXN-001-28498",
-    date: "2023-03-16T11:45:00",
-    vendingMachine: {
-      id: "VM-003",
-      location: "Downtown Office",
-    },
-    items: [
-      {
-        product: {
-          id: "P8",
-          name: "Sparkling Water",
-          image:
-            "https://images.unsplash.com/photo-1598343175492-e316fb5aa3fd?w=100&h=100&q=80&fit=crop",
-          price: 2.25,
-        },
-        quantity: 1,
-        price: 2.25,
-      },
-    ],
-    totalAmount: 2.25,
-    paymentMethod: "Mobile Pay",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001-28499",
-    date: "2023-03-16T13:20:00",
-    vendingMachine: {
-      id: "VM-001",
-      location: "Main Street Mall",
-    },
-    items: [
-      {
-        product: {
-          id: "P9",
-          name: "Chocolate Bar",
-          image:
-            "https://images.unsplash.com/photo-1614088685112-0a760b71a3c8?w=100&h=100&q=80&fit=crop",
-          price: 1.99,
-        },
-        quantity: 1,
-        price: 1.99,
-      },
-    ],
-    totalAmount: 1.99,
-    paymentMethod: "Cash",
-    status: "Completed",
-  },
-  {
-    id: "TXN-001-28500",
-    date: "2023-03-16T14:55:00",
-    vendingMachine: {
-      id: "VM-004",
-      location: "University Campus",
-    },
-    items: [
-      {
-        product: {
-          id: "P10",
-          name: "Trail Mix",
-          image:
-            "https://images.unsplash.com/photo-1604215707327-57f886e8d9d3?w=100&h=100&q=80&fit=crop",
-          price: 3.75,
-        },
-        quantity: 1,
-        price: 3.75,
-      },
-    ],
-    totalAmount: 3.75,
-    paymentMethod: "Credit Card",
-    status: "Processing",
-  },
-  {
-    id: "TXN-001-28501",
-    date: "2023-03-16T16:10:00",
-    vendingMachine: {
-      id: "VM-002",
-      location: "Central Station",
-    },
-    items: [
-      {
-        product: {
-          id: "P11",
-          name: "Fresh Orange Juice",
-          image:
-            "https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=100&h=100&q=80&fit=crop",
-          price: 4.99,
-        },
-        quantity: 1,
-        price: 4.99,
-      },
-    ],
-    totalAmount: 4.99,
-    paymentMethod: "Mobile Pay",
-    status: "Completed",
-  },
-]
-
-function sortTransactionsByDate(transactions: PublicTransactionDataDTO[]) {
+function sortTransactionsByDate(
+  transactions: PublicTransactionWithItemsAndProductDTO[]
+) {
   return [...transactions].sort((a, b) => {
     const dateA = new Date(a.createdAt).getTime()
     const dateB = new Date(b.createdAt).getTime()
@@ -336,11 +83,13 @@ export default function SalesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [date, setDate] = useState<Date | undefined>(undefined)
   const [filteredSales, setFilteredSales] = useState<
-    PublicTransactionDataDTO[]
+    PublicTransactionWithItemsAndProductDTO[]
   >([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [allSales, setAllSales] = useState<PublicTransactionDataDTO[]>([])
+  const [allSales, setAllSales] = useState<
+    PublicTransactionWithItemsAndProductDTO[]
+  >([])
 
   // Fetch data effect
   useEffect(() => {

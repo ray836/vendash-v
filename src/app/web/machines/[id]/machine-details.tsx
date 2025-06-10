@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import {
   ArrowLeft,
   Settings,
-  AlertTriangle,
   Banknote,
   Package,
   Calendar,
@@ -19,6 +18,13 @@ import {
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -38,11 +44,11 @@ import {
   createPreKit,
   getMachinePreKit,
   updatePreKitItems,
+  getMachineTransactions,
 } from "./actions"
-import { MachineWithSlotsDTO } from "@/core/use-cases/VendingMachine/GetMachineWithSlotsUseCase"
-import { MachineType } from "@/core/domain/entities/VendingMachine"
-import { PublicSlotDTO } from "@/core/domain/DTOs/slotDTOs"
-import { PublicSlotWithProductDTO } from "@/core/domain/DTOs/slotDTOs"
+import { MachineDetailDataDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
+import { PublicSlotDTO } from "@/domains/Slot/schemas/SlotSchemas"
+import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import {
   Tooltip,
   TooltipContent,
@@ -50,13 +56,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
-import { PublicPreKitItemDTO } from "@/core/domain/DTOs/prekitDTOs"
+import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
+import { PublicPreKitItem } from "@/domains/PreKit/schemas/PrekitSchemas"
+import { GetTransactionsForMachineResponseDTO } from "@/domains/Transaction/schemas/GetTransactionsForMachineSchema"
+import { TransactionSchemas } from "@/domains/Transaction/schemas/TransactionSchemas"
+import { formatDateLabel } from "@/utils/date"
+import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
 
 interface MachineDetailsProps {
   id: string
 }
 
-interface PreKitItem extends PublicPreKitItemDTO {
+interface PreKitItem extends PublicPreKitItem {
   currentQuantity: number
   capacity: number
   slotCode: string
@@ -76,18 +87,37 @@ function calculateOverallInventory(slots: PublicSlotDTO[]) {
 
 // First, create a helper function to organize slots by row (if not already present)
 const organizeSlotsByRow = (slots: PublicSlotWithProductDTO[]) => {
-  return slots.reduce((acc, slot) => {
-    if (!acc[slot.row]) {
-      acc[slot.row] = []
+  // Sort slots by row (A, B, C...) and then by column number
+  const sortedSlots = [...slots].sort((a, b) => {
+    const rowA = a.labelCode.charAt(0)
+    const rowB = b.labelCode.charAt(0)
+    if (rowA !== rowB) {
+      return rowA.localeCompare(rowB)
     }
-    acc[slot.row].push(slot)
+    const colA = parseInt(a.labelCode.slice(1))
+    const colB = parseInt(b.labelCode.slice(1))
+    return colA - colB
+  })
+
+  // Assign sequence numbers
+  sortedSlots.forEach((slot, index) => {
+    slot.sequenceNumber = index + 1
+  })
+
+  // Organize by row
+  return sortedSlots.reduce((acc, slot) => {
+    const rowLabel = slot.labelCode.charAt(0)
+    if (!acc[rowLabel]) {
+      acc[rowLabel] = []
+    }
+    acc[rowLabel].push(slot)
     return acc
   }, {} as Record<string, PublicSlotWithProductDTO[]>)
 }
 
 export default function MachineDetails({ id }: MachineDetailsProps) {
   const router = useRouter()
-  const [machineData, setMachineData] = useState<MachineWithSlotsDTO | null>(
+  const [machineData, setMachineData] = useState<MachineDetailDataDTO | null>(
     null
   )
   const [isLoading, setIsLoading] = useState(true)
@@ -96,6 +126,11 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const [isLoadingPreKit, setIsLoadingPreKit] = useState(false)
   const [hasExistingPreKit, setHasExistingPreKit] = useState(false)
   const [isEditingPreKit, setIsEditingPreKit] = useState(false)
+  const [salesData, setSalesData] =
+    useState<GetTransactionsForMachineResponseDTO | null>(null)
+  const [salesPeriod, setSalesPeriod] = useState<
+    "daily" | "weekly" | "monthly"
+  >("daily")
 
   const fetchPreKit = async () => {
     if (!machineData) return
@@ -115,7 +150,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
               productId: item.productId,
               slotId: item.slotId,
               quantity: item.quantity,
-              productImage: slot.productImage,
+              productImage: slot.productImage ?? "",
               productName: slot.productName,
               preKitId: item.preKitId,
               currentQuantity: slot.currentQuantity,
@@ -158,6 +193,28 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
     }
   }, [id, machineData])
 
+  useEffect(() => {
+    const fetchSalesData = async () => {
+      try {
+        const endDate = new Date()
+        const startDate = new Date()
+        startDate.setDate(startDate.getDate() - 90) // Last 30 days
+
+        const result = await getMachineTransactions(id, startDate, endDate)
+        if (result.success && result.data) {
+          console.log("result.data", result.data)
+          setSalesData(result.data)
+        }
+      } catch (error) {
+        console.error("Failed to fetch sales data:", error)
+      }
+    }
+
+    if (machineData) {
+      fetchSalesData()
+    }
+  }, [id, machineData])
+
   if (isLoading || !machineData) {
     return (
       <div className="flex justify-center items-center h-64">Loading...</div>
@@ -184,8 +241,8 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   }
 
   const handleSlotClick = (slot: PublicSlotWithProductDTO) => {
-    // Only allow adding items to pre-kit when in edit mode
-    if (!isEditingPreKit) return
+    // Allow adding items to pre-kit when in edit mode or when there's no pre-kit
+    if (!isEditingPreKit && hasExistingPreKit) return
 
     if (!slot.productId) return
 
@@ -201,7 +258,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
           productId: slot.productId,
           slotId: slot.id!, // Add non-null assertion since we know productId exists
           quantity: quantityNeeded,
-          productImage: slot.productImage,
+          productImage: slot.productImage ?? "",
           productName: slot.productName,
           preKitId: "",
           currentQuantity: slot.currentQuantity,
@@ -297,6 +354,55 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const handleRemoveItem = (slotId: string) => {
     setPreKitItems(preKitItems.filter((item) => item.slotId !== slotId))
   }
+
+  console.log("salesData", salesData)
+  console.log("chart data", Object.entries(salesData?.daily ?? {}))
+
+  // Helper to group and sum transactions by period
+  type PublicTransaction = typeof TransactionSchemas.public._type
+
+  function groupAndSum(
+    transactions: PublicTransaction[],
+    period: "daily" | "weekly" | "monthly"
+  ) {
+    const map = new Map<string, number>()
+    transactions.forEach((tx) => {
+      let key = ""
+      if (period === "daily") {
+        key = tx.createdAt.toISOString().split("T")[0]
+      } else if (period === "weekly") {
+        const d = new Date(
+          Date.UTC(
+            tx.createdAt.getFullYear(),
+            tx.createdAt.getMonth(),
+            tx.createdAt.getDate()
+          )
+        )
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7))
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+        const weekNo = Math.ceil(
+          ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
+        )
+        key = `${d.getUTCFullYear()}-W${weekNo}`
+      } else if (period === "monthly") {
+        key = `${tx.createdAt.getFullYear()}-${String(
+          tx.createdAt.getMonth() + 1
+        ).padStart(2, "0")}`
+      }
+      map.set(key, (map.get(key) || 0) + tx.total)
+    })
+    // Sort keys chronologically
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([period, sales]) => ({ period, sales }))
+  }
+
+  const dummyData = [
+    { period: "2025-04-08", sales: 10 },
+    { period: "2025-04-09", sales: 20 },
+    { period: "2025-04-10", sales: 5 },
+  ]
+  console.log("Dummy chart data", dummyData)
 
   return (
     <>
@@ -440,11 +546,12 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   <Calendar className="h-4 w-4 mr-1" />
                   Last Restocked
                 </span>
-                <span>{formatDate(lastRestocked)}</span>
+                <span>{lastRestocked ? formatDate(lastRestocked) : "N/A"}</span>
               </div>
             </CardFooter>
           </Card>
 
+          {/* Alerts Card - Commented out for future use
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Alerts</CardTitle>
@@ -481,10 +588,13 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   <Calendar className="h-4 w-4 mr-1" />
                   Last Maintenance
                 </span>
-                <span>{formatDate(lastMaintenance)}</span>
+                <span>
+                  {lastMaintenance ? formatDate(lastMaintenance) : "N/A"}
+                </span>
               </div>
             </CardFooter>
           </Card>
+          */}
         </div>
 
         <Tabs defaultValue="overview">
@@ -554,10 +664,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
 
                 <Separator className="my-6" />
 
-                <div
-                  className="grid gap-6"
-                  style={{ gridTemplateColumns: "3fr 2fr" }}
-                >
+                <div className="grid gap-6 md:grid-cols-[3fr_2fr]">
                   <div>
                     <div className="space-y-4">
                       <h3 className="text-sm font-medium">Machine Layout</h3>
@@ -663,7 +770,9 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                                 Restocked
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {formatDate(lastRestocked)}
+                                {lastRestocked
+                                  ? formatDate(lastRestocked)
+                                  : "N/A"}
                               </p>
                             </div>
                             <Package className="h-4 w-4 text-muted-foreground" />
@@ -674,7 +783,9 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                                 Maintenance
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {formatDate(lastMaintenance)}
+                                {lastMaintenance
+                                  ? formatDate(lastMaintenance)
+                                  : "N/A"}
                               </p>
                             </div>
                             <Settings className="h-4 w-4 text-muted-foreground" />
@@ -699,9 +810,24 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                             </div>
                           ) : preKitItems.length === 0 ? (
-                            <div className="text-center text-muted-foreground py-4">
-                              Click on slots in the machine layout to add items
-                              to your pre-kit
+                            <div className="space-y-4">
+                              <div className="text-center text-muted-foreground py-4">
+                                Click on slots in the machine layout to add
+                                items to your pre-kit
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  className="flex-1"
+                                  onClick={handleCreatePreKit}
+                                  disabled={
+                                    isPending || preKitItems.length === 0
+                                  }
+                                >
+                                  {isPending
+                                    ? "Processing..."
+                                    : "Create Pre-kit"}
+                                </Button>
+                              </div>
                             </div>
                           ) : (
                             <>
@@ -861,7 +987,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                     <div className="flex items-center">
                       <Banknote className="h-5 w-5 mr-2 text-primary" />
                       <p className="text-2xl font-bold">
-                        ${revenue.daily.toFixed(2)}
+                        ${salesData?.dailyAverage?.toFixed(2) ?? "0.00"}
                       </p>
                     </div>
                   </div>
@@ -872,7 +998,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                     <div className="flex items-center">
                       <Banknote className="h-5 w-5 mr-2 text-primary" />
                       <p className="text-2xl font-bold">
-                        ${revenue.weekly.toFixed(2)}
+                        ${salesData?.weeklyAverage?.toFixed(2) ?? "0.00"}
                       </p>
                     </div>
                   </div>
@@ -883,7 +1009,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                     <div className="flex items-center">
                       <Banknote className="h-5 w-5 mr-2 text-primary" />
                       <p className="text-2xl font-bold">
-                        ${revenue.monthly.toFixed(2)}
+                        ${salesData?.monthlyAverage?.toFixed(2) ?? "0.00"}
                       </p>
                     </div>
                   </div>
@@ -892,30 +1018,46 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                 <Separator className="my-6" />
 
                 <div className="space-y-4">
-                  <h3 className="text-sm font-medium">Revenue Trend</h3>
-                  <div className="h-[200px] flex items-end gap-2">
-                    {Array.from({ length: 7 }).map((_, i) => {
-                      const height = 30 + Math.random() * 70
-                      return (
-                        <div
-                          key={i}
-                          className="flex-1 flex flex-col items-center gap-2"
-                        >
-                          <div
-                            className="w-full bg-primary/80 rounded-t-sm"
-                            style={{ height: `${height}%` }}
-                          />
-                          <span className="text-xs text-muted-foreground">
-                            {
-                              ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][
-                                i
-                              ]
-                            }
-                          </span>
-                        </div>
-                      )
-                    })}
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-medium">Sales Overview</h3>
+                    <Select
+                      value={salesPeriod}
+                      onValueChange={(value: "daily" | "weekly" | "monthly") =>
+                        setSalesPeriod(value)
+                      }
+                    >
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Select period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
+                  {salesData && (
+                    <SalesChart
+                      data={(() => {
+                        if (salesPeriod === "daily")
+                          return groupAndSum(
+                            salesData.daily as PublicTransaction[],
+                            "daily"
+                          )
+                        if (salesPeriod === "weekly")
+                          return groupAndSum(
+                            salesData.weekly as PublicTransaction[],
+                            "weekly"
+                          )
+                        if (salesPeriod === "monthly")
+                          return groupAndSum(
+                            salesData.monthly as PublicTransaction[],
+                            "monthly"
+                          )
+                        return []
+                      })()}
+                    />
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -993,5 +1135,31 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
         </Tabs>
       </div>
     </>
+  )
+}
+
+function SalesChart({ data }: { data: { period: string; sales: number }[] }) {
+  const maxSales = Math.max(1, ...data.map((item) => item.sales))
+  console.log("data", data)
+  console.log("maxSales", maxSales)
+
+  return (
+    <div className="h-[200px] flex items-end gap-2">
+      {data.map((item, i) => {
+        const height = (item.sales / maxSales) * 200
+        console.log("height", height)
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center gap-2">
+            <div
+              className="w-full bg-green-500"
+              style={{ height: `${height}px` }}
+            />
+            <span className="text-xs text-muted-foreground">
+              {formatDateLabel(item.period, GroupByType.DAY)}
+            </span>
+          </div>
+        )
+      })}
+    </div>
   )
 }

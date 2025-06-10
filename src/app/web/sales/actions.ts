@@ -1,14 +1,15 @@
 "use server"
-import { GetOrgTransactionsUseCase } from "@/core/use-cases/Transaction/getOrgTransactionsUseCase"
-import { DrizzleTransactionRepo } from "@/infrastructure/repositories/drizzle-TransactionRepo"
+import { GetOrgTransactionsUseCase } from "@/domains/Transaction/use-cases/GetOrgTransactionsUseCase"
+import { DrizzleTransactionRepository } from "@/infrastructure/repositories/DrizzleTransactionRepository"
 import { db } from "@/infrastructure/database"
-import { PublicTransactionDataDTO } from "@/core/domain/DTOs/transactionDTOs"
+import { PublicTransactionWithItemsAndProductDTO } from "@/domains/Transaction/schemas/TransactionSchemas"
+
 export async function getOrgTransactions(): Promise<
-  PublicTransactionDataDTO[]
+  PublicTransactionWithItemsAndProductDTO[]
 > {
   const organizationId = "1"
   const transactions = await new GetOrgTransactionsUseCase(
-    new DrizzleTransactionRepo(db)
+    new DrizzleTransactionRepository(db)
   ).execute(organizationId)
   return transactions
 }

@@ -1,37 +1,15 @@
 "use server"
 
 import { db } from "@/infrastructure/database"
-import { DrizzleProductRepository } from "@/infrastructure/repositories/drizzle-ProductRepo"
-import { DrizzleInventoryRepository } from "@/infrastructure/repositories/drizzle-InventoryRepo"
-import { DrizzleTransactionRepo } from "@/infrastructure/repositories/drizzle-TransactionRepo"
-import { GetOrgProductDataMetrics } from "@/core/use-cases/Product/getOrgProductDataMetrics"
-import { DrizzleSlotRepository } from "@/infrastructure/repositories/drizzle-SlotRepo"
-import { ProductUseCase } from "@/core/use-cases/Product/ProductUseCase"
-import { Product } from "@/core/domain/entities/Product"
-
-export async function getProducts() {
-  try {
-    const productRepo = new DrizzleProductRepository(db)
-    return await productRepo.findAll()
-  } catch (error) {
-    console.error("Failed to fetch products:", error)
-    throw new Error("Failed to fetch products")
-  }
-}
+import { GetOrgProductDataMetrics } from "@/domains/Product/use-cases/GetOrgProductDataMetrics"
+import { ProductUseCase } from "@/domains/Product/use-cases/ProductUseCase"
+import { Product } from "@/domains/Product/entities/Product"
+import { DrizzleProductRepository } from "@/infrastructure/repositories/DrizzleProductRepository"
 
 export async function getOrgProductDataMetrics(organizationId: string) {
   try {
     const productRepo = new DrizzleProductRepository(db)
-    const inventoryRepo = new DrizzleInventoryRepository(db)
-    const transactionRepo = new DrizzleTransactionRepo(db)
-    const slotRepo = new DrizzleSlotRepository(db)
-
-    const getOrgProductDataMetrics = new GetOrgProductDataMetrics(
-      productRepo,
-      inventoryRepo,
-      transactionRepo,
-      slotRepo
-    )
+    const getOrgProductDataMetrics = new GetOrgProductDataMetrics(productRepo)
 
     return await getOrgProductDataMetrics.execute(organizationId)
   } catch (error) {

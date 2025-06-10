@@ -12,7 +12,6 @@ import {
   CardHeader,
   CardTitle,
   CardFooter,
-  CardDescription,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,23 +23,26 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { PublicProductDTO } from "@/core/domain/DTOs/productDTOs"
+import { PublicProductDTO } from "@/domains/Product/schemas/ProductSchemas"
 import { saveSlots, updateMachine, getMachine } from "./actions"
-import {
-  PublicSlotDTO,
-  PublicSlotWithProductDTO,
-} from "@/core/domain/DTOs/slotDTOs"
-import { PublicVendingMachineDTO } from "@/core/domain/DTOs/vendingMachineDTOs"
+import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { MachineType } from "@/core/domain/entities/VendingMachine"
+import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
+import { PublicVendingMachineDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
+import { z } from "zod"
+import { SlotSchemas } from "@/domains/Slot/schemas/SlotSchemas"
 // Separate products by type
 // const products = { drinks: [...], snacks: [...] }
 
-type Slot = PublicSlotDTO
+// type Slot = PublicSlotDTO
+type Slot = z.infer<typeof SlotSchemas.public> & {
+  row: string
+  column: number
+}
 
 function createInitialSlots(rows: number, columns: number): Slot[] {
   const slots: Slot[] = []
@@ -58,7 +60,7 @@ function createInitialSlots(rows: number, columns: number): Slot[] {
         machineId: "",
         row: rowLetter,
         column: col,
-      })
+      } as Slot)
     }
   }
   return slots
@@ -204,7 +206,6 @@ function GridControls({
 
 function SlotGrid({
   slots,
-  selectedProduct,
   onSlotClick,
   activeSlot,
   machineType,
@@ -213,7 +214,6 @@ function SlotGrid({
   onRemoveSlot,
 }: {
   slots: Slot[]
-  selectedProduct: PublicProductDTO | null
   onSlotClick: (slot: Slot) => void
   activeSlot: Slot | null
   machineType: MachineType
@@ -479,14 +479,12 @@ export function VendingMachineSetup({
     useState<MachineType>(initialMachineType)
   const [rows, setRows] = useState(0)
   const [columns, setColumns] = useState(0)
-  const [slots, setSlots] = useState<PublicSlotDTO[]>([])
+  const [slots, setSlots] = useState<Slot[]>([])
   const [selectedProduct, setSelectedProduct] =
     useState<PublicProductDTO | null>(null)
   const [activeSlot, setActiveSlot] = useState<Slot | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("products")
-
-  const { toast } = useToast()
 
   // Initialize everything in one effect
   useEffect(() => {
@@ -502,7 +500,11 @@ export function VendingMachineSetup({
         setColumns(initialColumns)
         setSlots(
           initialSlots.length > 0
-            ? initialSlots
+            ? initialSlots.map((slot) => ({
+                ...slot,
+                row: slot.labelCode.charAt(0),
+                column: parseInt(slot.labelCode.charAt(-1)),
+              }))
             : createInitialSlots(initialRows, initialColumns)
         )
       } catch (error) {
@@ -580,7 +582,9 @@ export function VendingMachineSetup({
         labelCode: `${rowLetter}-${col + 1}`,
         ccReaderCode: "",
         currentQuantity: 0,
-      })
+        organizationId: machine.organizationId,
+        sequenceNumber: 0,
+      } as Slot)
     }
 
     setRows(rows + 1)
@@ -628,7 +632,9 @@ export function VendingMachineSetup({
         currentQuantity: 0,
         row: rowLetter,
         column: newColumn,
-      })
+        organizationId: machine.organizationId,
+        sequenceNumber: 0,
+      } as Slot)
     }
 
     setSlots(newSlots)
@@ -675,6 +681,8 @@ export function VendingMachineSetup({
       currentQuantity: 0,
       row: rowLetter,
       column: newColumn,
+      organizationId: machine.organizationId,
+      sequenceNumber: 0,
     }
 
     setSlots([...slots, newSlot])
@@ -715,13 +723,16 @@ export function VendingMachineSetup({
           currentQuantity: 0,
           row: slot.row,
           column: slot.column,
+          organizationId: machine.organizationId,
+          sequenceNumber: slot.sequenceNumber,
+          id: slot.id,
         })),
       }
 
       const result = await saveSlots(
         machineId,
         configuration.slots,
-        machine.cardReaderId
+        machine.cardReaderId || ""
       )
 
       if (result.success) {
@@ -817,7 +828,6 @@ export function VendingMachineSetup({
               />
               <SlotGrid
                 slots={slots}
-                selectedProduct={selectedProduct}
                 onSlotClick={handleSlotClick}
                 activeSlot={activeSlot}
                 machineType={machineType}
@@ -940,10 +950,10 @@ function MachineSettings({
   const [isSaving, setIsSaving] = useState(false)
   const [cardReaderId, setCardReaderId] = useState(machine.cardReaderId || "")
 
-  const handleSave = async () => {
+  const handleCardReaderUpdate = async (newCardReaderId: string) => {
     try {
       setIsSaving(true)
-      await onUpdate(cardReaderId)
+      await onUpdate(newCardReaderId)
       toast({
         title: "Success",
         description: "Card reader ID updated successfully",
@@ -971,7 +981,10 @@ function MachineSettings({
             placeholder="Enter card reader ID"
           />
           <span>{machine.cardReaderId} here</span>
-          <Button onClick={handleSave} disabled={isSaving}>
+          <Button
+            onClick={() => handleCardReaderUpdate(cardReaderId)}
+            disabled={isSaving}
+          >
             {isSaving ? "Saving..." : "Save"}
           </Button>
         </div>
