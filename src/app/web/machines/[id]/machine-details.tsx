@@ -62,6 +62,14 @@ import { GetTransactionsForMachineResponseDTO } from "@/domains/Transaction/sche
 import { TransactionSchemas } from "@/domains/Transaction/schemas/TransactionSchemas"
 import { formatDateLabel } from "@/utils/date"
 import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
+import { DayPicker } from "react-day-picker"
+import "react-day-picker/dist/style.css"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
 
 interface MachineDetailsProps {
   id: string
@@ -128,9 +136,11 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const [isEditingPreKit, setIsEditingPreKit] = useState(false)
   const [salesData, setSalesData] =
     useState<GetTransactionsForMachineResponseDTO | null>(null)
-  const [salesPeriod, setSalesPeriod] = useState<
-    "daily" | "weekly" | "monthly"
-  >("daily")
+  const [isLoadingSales, setIsLoadingSales] = useState(false)
+  const [groupBy, setGroupBy] = useState<"daily" | "weekly" | "monthly">(
+    "daily"
+  )
+  const [date, setDate] = useState<Date | undefined>(new Date())
 
   const fetchPreKit = async () => {
     if (!machineData) return
@@ -193,23 +203,25 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
     }
   }, [id, machineData])
 
-  useEffect(() => {
-    const fetchSalesData = async () => {
-      try {
-        const endDate = new Date()
-        const startDate = new Date()
-        startDate.setDate(startDate.getDate() - 90) // Last 30 days
+  const fetchSalesData = async () => {
+    try {
+      setIsLoadingSales(true)
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - 90) // Last 90 days
 
-        const result = await getMachineTransactions(id, startDate, endDate)
-        if (result.success && result.data) {
-          console.log("result.data", result.data)
-          setSalesData(result.data)
-        }
-      } catch (error) {
-        console.error("Failed to fetch sales data:", error)
+      const response = await getMachineTransactions(id, startDate, endDate)
+      if (response.success && response.data) {
+        setSalesData(response.data)
       }
+    } catch (error) {
+      console.error("Error fetching sales data:", error)
+    } finally {
+      setIsLoadingSales(false)
     }
+  }
 
+  useEffect(() => {
     if (machineData) {
       fetchSalesData()
     }
@@ -979,85 +991,103 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                 <CardDescription>Revenue and transaction data</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-6 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium leading-none">
-                      Daily Revenue
-                    </h3>
-                    <div className="flex items-center">
-                      <Banknote className="h-5 w-5 mr-2 text-primary" />
-                      <p className="text-2xl font-bold">
-                        ${salesData?.dailyAverage?.toFixed(2) ?? "0.00"}
-                      </p>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-medium">Sales Overview</h3>
+                    <div className="flex items-center gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-[240px] justify-start text-left font-normal",
+                              !date && "text-muted-foreground"
+                            )}
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {date ? (
+                              formatDateLabel(date.toISOString(), groupBy)
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <DayPicker
+                            mode="single"
+                            selected={date}
+                            onSelect={setDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Select
+                        value={groupBy}
+                        onValueChange={(
+                          value: "daily" | "weekly" | "monthly"
+                        ) => setGroupBy(value)}
+                      >
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Select time range" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium leading-none">
-                      Weekly Revenue
-                    </h3>
-                    <div className="flex items-center">
-                      <Banknote className="h-5 w-5 mr-2 text-primary" />
-                      <p className="text-2xl font-bold">
-                        ${salesData?.weeklyAverage?.toFixed(2) ?? "0.00"}
-                      </p>
+                  {isLoadingSales ? (
+                    <div className="flex items-center justify-center h-[300px]">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium leading-none">
-                      Monthly Revenue
-                    </h3>
-                    <div className="flex items-center">
-                      <Banknote className="h-5 w-5 mr-2 text-primary" />
-                      <p className="text-2xl font-bold">
-                        ${salesData?.monthlyAverage?.toFixed(2) ?? "0.00"}
-                      </p>
+                  ) : salesData ? (
+                    <SalesChart
+                      data={(() => {
+                        if (groupBy === "daily")
+                          return groupAndSum(salesData.daily, "daily")
+                        if (groupBy === "weekly")
+                          return groupAndSum(salesData.weekly, "weekly")
+                        if (groupBy === "monthly")
+                          return groupAndSum(salesData.monthly, "monthly")
+                        return []
+                      })()}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                      No sales data available
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <Separator className="my-6" />
 
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-medium">Sales Overview</h3>
-                    <Select
-                      value={salesPeriod}
-                      onValueChange={(value: "daily" | "weekly" | "monthly") =>
-                        setSalesPeriod(value)
-                      }
-                    >
-                      <SelectTrigger className="w-[120px]">
-                        <SelectValue placeholder="Select period" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <div className="grid grid-cols-3 gap-4 mt-4">
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Daily Average
+                    </p>
+                    <p className="text-2xl font-bold">
+                      ${salesData?.dailyAverage.toFixed(2)}
+                    </p>
                   </div>
-                  {salesData && (
-                    <SalesChart
-                      data={(() => {
-                        if (salesPeriod === "daily")
-                          return groupAndSum(
-                            salesData.daily as PublicTransaction[],
-                            "daily"
-                          )
-                        if (salesPeriod === "weekly")
-                          return groupAndSum(
-                            salesData.weekly as PublicTransaction[],
-                            "weekly"
-                          )
-                        if (salesPeriod === "monthly")
-                          return groupAndSum(
-                            salesData.monthly as PublicTransaction[],
-                            "monthly"
-                          )
-                        return []
-                      })()}
-                    />
-                  )}
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Weekly Average
+                    </p>
+                    <p className="text-2xl font-bold">
+                      ${salesData?.weeklyAverage.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Monthly Average
+                    </p>
+                    <p className="text-2xl font-bold">
+                      ${salesData?.monthlyAverage.toFixed(2)}
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
