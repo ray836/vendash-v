@@ -85,9 +85,7 @@ const getOrderDetails = async (id: string) => {
 }
 
 interface PageProps {
-  params: Promise<{
-    id: string
-  }> & {
+  params: {
     id: string
   }
 }

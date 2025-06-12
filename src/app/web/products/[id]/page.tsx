@@ -1,9 +1,7 @@
 import { ProductDetail } from "./product-details"
 
 interface PageProps {
-  params: Promise<{
-    id: string
-  }> & {
+  params: {
     id: string
   }
 }

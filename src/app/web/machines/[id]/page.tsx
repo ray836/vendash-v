@@ -1,12 +1,13 @@
 import MachineDetails from "./machine-details"
 
 interface PageProps {
-  params: Promise<{ id: string }> & { id: string }
+  params: {
+    id: string
+  }
 }
 
 export default async function MachinePage({ params }: PageProps) {
-  // For Next.js dynamic routes, we need to await the params
-  const { id } = await params
+  const { id } = params
 
   return (
     <>
