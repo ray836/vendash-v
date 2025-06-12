@@ -10,7 +10,7 @@ import {
 } from "../database/schema"
 import { db } from "../database"
 import { RouteStopDTO } from "@/core/domain/interfaces/dtos/RouteStopDTO"
-import { LocationDTO } from "@/core/domain/interfaces/dtos/LocationDTO"
+import { PublicLocationDTO } from "@/domains/Location/schemas/locationDTOs"
 
 export class DrizzleRouteRepo implements RouteRepository {
   constructor(private readonly database: typeof db) {}
