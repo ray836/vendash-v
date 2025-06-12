@@ -1,12 +1,12 @@
 import MachineDetails from "./machine-details"
 
-interface PageProps {
-  params: {
-    id: string
-  }
-}
-
-export default async function MachinePage({ params }: PageProps) {
+export default async function MachinePage({
+  params,
+  searchParams,
+}: {
+  params: { id: string }
+  searchParams: { [key: string]: string | string[] | undefined }
+}) {
   const { id } = params
 
   return (

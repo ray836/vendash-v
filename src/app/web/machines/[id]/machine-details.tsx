@@ -137,9 +137,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const [salesData, setSalesData] =
     useState<GetTransactionsForMachineResponseDTO | null>(null)
   const [isLoadingSales, setIsLoadingSales] = useState(false)
-  const [groupBy, setGroupBy] = useState<"daily" | "weekly" | "monthly">(
-    "daily"
-  )
+  const [groupBy, setGroupBy] = useState<GroupByType>(GroupByType.DAY)
   const [date, setDate] = useState<Date | undefined>(new Date())
 
   const fetchPreKit = async () => {
@@ -1023,17 +1021,21 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                       </Popover>
                       <Select
                         value={groupBy}
-                        onValueChange={(
-                          value: "daily" | "weekly" | "monthly"
-                        ) => setGroupBy(value)}
+                        onValueChange={(value: GroupByType) =>
+                          setGroupBy(value)
+                        }
                       >
                         <SelectTrigger className="w-[180px]">
                           <SelectValue placeholder="Select time range" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">Weekly</SelectItem>
-                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value={GroupByType.DAY}>Daily</SelectItem>
+                          <SelectItem value={GroupByType.WEEK}>
+                            Weekly
+                          </SelectItem>
+                          <SelectItem value={GroupByType.MONTH}>
+                            Monthly
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1045,11 +1047,11 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   ) : salesData ? (
                     <SalesChart
                       data={(() => {
-                        if (groupBy === "daily")
+                        if (groupBy === GroupByType.DAY)
                           return groupAndSum(salesData.daily, "daily")
-                        if (groupBy === "weekly")
+                        if (groupBy === GroupByType.WEEK)
                           return groupAndSum(salesData.weekly, "weekly")
-                        if (groupBy === "monthly")
+                        if (groupBy === GroupByType.MONTH)
                           return groupAndSum(salesData.monthly, "monthly")
                         return []
                       })()}

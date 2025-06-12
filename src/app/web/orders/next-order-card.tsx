@@ -28,10 +28,34 @@ import {
 } from "@/domains/Order/schemas/orderDTOs"
 
 interface NextOrderCardProps {
-  nextOrderDate?: Date // Make this optional since we'll get it from the order
+  nextOrderDate?: Date
+  orderItems?: {
+    id: string
+    orderId: string
+    quantity: number
+    unitPrice: number
+    product: {
+      id: string
+      name: string
+      recommendedPrice: number
+      category: string
+      image: string
+      vendorLink: string
+      caseCost: number
+      caseSize: number
+      shippingAvailable: boolean
+      shippingTimeInDays: number
+      organizationId: string
+      createdAt: Date
+      updatedAt: Date
+    }
+  }[]
 }
 
-export function NextOrderCard({ nextOrderDate }: NextOrderCardProps) {
+export function NextOrderCard({
+  nextOrderDate,
+  orderItems,
+}: NextOrderCardProps) {
   const [items, setItems] = useState<PublicOrderItemResponseDTO[]>([])
   const [order, setOrder] = useState<PublicOrderDTO | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -46,6 +70,9 @@ export function NextOrderCard({ nextOrderDate }: NextOrderCardProps) {
       if (result.success && result.order) {
         setOrder(result.order)
         setItems(result.order.orderItems)
+      } else if (orderItems) {
+        // If no order exists but we have orderItems prop, use those
+        setItems(orderItems as PublicOrderItemResponseDTO[])
       }
     } catch (err: unknown) {
       console.error("Failed to fetch current order:", err)

@@ -9,13 +9,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { LocationSite } from "@/core/domain/entities/LocationSite"
+import { Location } from "@/domains/Location/entities/Location"
 import { useState, useEffect } from "react"
 import { createLocation, deleteLocation, getLocations } from "./actions"
 import { Plus, Save, Trash2 } from "lucide-react"
 
 export default function LocationsPage() {
-  const [locations, setLocations] = useState<LocationSite[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [isAddingLocation, setIsAddingLocation] = useState(false)
   const [newLocation, setNewLocation] = useState({
     name: "",

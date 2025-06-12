@@ -42,7 +42,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { MachineType } from "@/core/domain/entities/VendingMachine"
+import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
 
 // Sample initial locations - in a real app, this would come from your backend
 const initialLocations: Location[] = [
@@ -197,12 +197,10 @@ export function NewVendingMachineForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       const result = await createMachine({
-        id: values.machineId,
         type: values.type as MachineType,
         locationId: values.locationId,
         model: values.model,
         notes: values.notes || "",
-        organizationId: "1",
         cardReaderId: "1",
       })
       console.log(result)

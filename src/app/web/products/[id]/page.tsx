@@ -1,12 +1,12 @@
 import { ProductDetail } from "./product-details"
 
-interface PageProps {
+interface ProductPageProps {
   params: {
     id: string
   }
 }
 
-export default async function ProductPage({ params }: PageProps) {
+export default async function ProductPage({ params }: ProductPageProps) {
   const id = params.id
 
   return (

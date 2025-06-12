@@ -84,14 +84,16 @@ const getOrderDetails = async (id: string) => {
   }
 }
 
-interface PageProps {
+interface OrderDetailsPageProps {
   params: {
     id: string
   }
 }
 
 // Make the page component async
-export default async function OrderDetailsPage({ params }: PageProps) {
+export default async function OrderDetailsPage({
+  params,
+}: OrderDetailsPageProps) {
   const order = await getOrderDetails(params.id)
 
   return (
