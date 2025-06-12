@@ -2,11 +2,15 @@ import { VendingMachineSetup } from "./vending-machine-setup"
 import { getOrgProducts, getMachineWithSlots } from "./actions"
 import { Suspense } from "react"
 
-export default async function MachineSetupPage({
-  params,
-}: {
-  params: { id: string }
-}) {
+type PageProps = {
+  params: {
+    id: string
+  }
+  searchParams: { [key: string]: string | string[] | undefined }
+}
+
+export default async function MachineSetupPage(props: PageProps) {
+  const { params } = props
   const orgProducts = await getOrgProducts()
   const machineData = await getMachineWithSlots(params.id)
 
