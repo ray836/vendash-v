@@ -1,7 +1,5 @@
 "use server"
 
-export const runtime = "edge"
-
 import { CreateVendingMachineUseCase } from "@/domains/VendingMachine/use-cases/CreateVendingMachineUseCase"
 import { DeleteVendingMachineUseCase } from "@/domains/VendingMachine/use-cases/DeleteVendingMachineUseCase"
 import { GetVendingMachinesUseCase } from "@/domains/VendingMachine/use-cases/GetVendingMachinesUseCase"
@@ -15,6 +13,9 @@ import {
 
 const organizationId = "1"
 
+// Cache the repository instance
+const repository = new DrizzleVendingMachineRepository(db)
+
 export async function createMachine(machine: {
   type: MachineType
   locationId: string
@@ -22,11 +23,8 @@ export async function createMachine(machine: {
   notes?: string
   cardReaderId?: string
 }) {
-  const drizzleVendingMachineRepository = new DrizzleVendingMachineRepository(
-    db
-  )
   const createVendingMachineUseCase = new CreateVendingMachineUseCase(
-    drizzleVendingMachineRepository
+    repository
   )
   const result = await createVendingMachineUseCase.execute({
     type: machine.type,
@@ -41,12 +39,7 @@ export async function createMachine(machine: {
 
 export async function getMachines() {
   try {
-    const drizzleVendingMachineRepository = new DrizzleVendingMachineRepository(
-      db
-    )
-    const getVendingMachinesUseCase = new GetVendingMachinesUseCase(
-      drizzleVendingMachineRepository
-    )
+    const getVendingMachinesUseCase = new GetVendingMachinesUseCase(repository)
     const machines = await getVendingMachinesUseCase.execute(organizationId)
     return JSON.stringify(machines)
   } catch (error) {
@@ -57,11 +50,8 @@ export async function getMachines() {
 
 export async function updateMachineStatus(id: string, status: MachineStatus) {
   try {
-    const drizzleVendingMachineRepository = new DrizzleVendingMachineRepository(
-      db
-    )
     const updateVendingMachineStatusUseCase =
-      new UpdateVendingMachineStatusUseCase(drizzleVendingMachineRepository)
+      new UpdateVendingMachineStatusUseCase(repository)
     const result = await updateVendingMachineStatusUseCase.execute(id, {
       status,
     })
@@ -80,11 +70,8 @@ export async function updateMachineStatus(id: string, status: MachineStatus) {
 }
 
 export async function deleteMachine(id: string) {
-  const drizzleVendingMachineRepository = new DrizzleVendingMachineRepository(
-    db
-  )
   const deleteVendingMachineUseCase = new DeleteVendingMachineUseCase(
-    drizzleVendingMachineRepository
+    repository
   )
   await deleteVendingMachineUseCase.execute(id)
 }
