@@ -1,5 +1,7 @@
 "use server"
 
+export const runtime = "edge"
+
 import { CreateVendingMachineUseCase } from "@/domains/VendingMachine/use-cases/CreateVendingMachineUseCase"
 import { DeleteVendingMachineUseCase } from "@/domains/VendingMachine/use-cases/DeleteVendingMachineUseCase"
 import { GetVendingMachinesUseCase } from "@/domains/VendingMachine/use-cases/GetVendingMachinesUseCase"
