@@ -7,6 +7,7 @@ import { products } from "@/infrastructure/database/schema"
 import { randomUUID } from "node:crypto"
 import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import { SaveSlot } from "@/domains/Slot/schemas/SaveSlotsSchemas"
+import { vendingMachines } from "@/infrastructure/database/schema"
 
 export class DrizzleSlotRepository implements ISlotRepository {
   constructor(private readonly database: typeof db) {}
@@ -129,7 +130,20 @@ export class DrizzleSlotRepository implements ISlotRepository {
     userId: string,
     updatedSlotsForMachine: SaveSlot[]
   ): Promise<void> {
-    // First, get all existing slots for this machine
+    // First, get the machine to get its organization ID
+    const machine = await this.database
+      .select()
+      .from(vendingMachines)
+      .where(eq(vendingMachines.id, machineId))
+      .limit(1)
+
+    if (machine.length === 0) {
+      throw new Error("Machine not found")
+    }
+
+    const organizationId = machine[0].organizationId
+
+    // Get all existing slots for this machine
     const existingSlots = await this.findByMachineId(machineId)
     const existingSlotIds = new Set(existingSlots.map((slot) => slot.id))
 
@@ -141,96 +155,90 @@ export class DrizzleSlotRepository implements ISlotRepository {
       (slot) => !slot.id || !existingSlotIds.has(slot.id)
     )
 
-    // Start a transaction to ensure all operations succeed or fail together
-    await this.database.transaction(async (tx) => {
-      // Update existing slots
-      for (let i = 0; i < existingSlotsToUpdate.length; i++) {
-        const saveSlot = existingSlotsToUpdate[i]
-        if (!saveSlot.id) continue // Skip if no ID (shouldn't happen due to filter)
+    try {
+      // Start a transaction to ensure all operations succeed or fail together
+      await this.database.transaction(async (tx) => {
+        // Update existing slots
+        for (let i = 0; i < existingSlotsToUpdate.length; i++) {
+          const saveSlot = existingSlotsToUpdate[i]
+          if (!saveSlot.id) continue // Skip if no ID (shouldn't happen due to filter)
 
-        // Find the original slot to preserve createdBy and createdAt
-        const originalSlot = existingSlots.find(
-          (slot) => slot.id === saveSlot.id
-        )
+          await tx
+            .update(slots)
+            .set({
+              machineId: machineId,
+              productId: saveSlot.productId,
+              labelCode: saveSlot.labelCode,
+              ccReaderCode: saveSlot.ccReaderCode || "",
+              cardReaderId: saveSlot.cardReaderId || "",
+              price: saveSlot.price.toString(),
+              capacity: saveSlot.capacity,
+              currentQuantity: saveSlot.currentQuantity,
+              organizationId: organizationId,
+              sequenceNumber: i, // Set sequence number based on order in updatedSlotsForMachine
+              updatedAt: new Date(),
+              updatedBy: userId,
+            })
+            .where(eq(slots.id, saveSlot.id))
+        }
 
-        await tx
-          .update(slots)
-          .set({
-            machineId: machineId,
-            productId: saveSlot.productId,
-            labelCode: saveSlot.labelCode,
-            ccReaderCode: saveSlot.ccReaderCode || "",
-            cardReaderId: saveSlot.cardReaderId || "",
-            price: saveSlot.price.toString(),
-            capacity: saveSlot.capacity,
-            currentQuantity: saveSlot.currentQuantity,
-            organizationId: originalSlot?.organizationId || "",
-            sequenceNumber: i, // Set sequence number based on order in updatedSlotsForMachine
-            updatedAt: new Date(),
-            updatedBy: userId,
-          })
-          .where(eq(slots.id, saveSlot.id))
-      }
-
-      // Create new slots
-      if (newSlotsToCreate.length > 0) {
-        await tx.insert(slots).values(
-          newSlotsToCreate.map((saveSlot, index) => ({
-            id: saveSlot.id || randomUUID(),
-            machineId: machineId,
-            productId: saveSlot.productId,
-            labelCode: saveSlot.labelCode,
-            ccReaderCode: saveSlot.ccReaderCode || "",
-            cardReaderId: saveSlot.cardReaderId || "",
-            price: saveSlot.price.toString(),
-            capacity: saveSlot.capacity,
-            currentQuantity: saveSlot.currentQuantity,
-            organizationId: "", // This should be set to the correct organization ID
-            sequenceNumber: existingSlotsToUpdate.length + index, // Set sequence number continuing from existing slots
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            createdBy: userId,
-            updatedBy: userId,
-          }))
-        )
-      }
-    })
+        // Create new slots
+        if (newSlotsToCreate.length > 0) {
+          await tx.insert(slots).values(
+            newSlotsToCreate.map((saveSlot, index) => ({
+              id: saveSlot.id || randomUUID(),
+              machineId: machineId,
+              productId: saveSlot.productId,
+              labelCode: saveSlot.labelCode,
+              ccReaderCode: saveSlot.ccReaderCode || "",
+              cardReaderId: saveSlot.cardReaderId || "",
+              price: saveSlot.price.toString(),
+              capacity: saveSlot.capacity,
+              currentQuantity: saveSlot.currentQuantity,
+              organizationId: organizationId,
+              sequenceNumber: existingSlotsToUpdate.length + index, // Set sequence number continuing from existing slots
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              createdBy: userId,
+              updatedBy: userId,
+            }))
+          )
+        }
+      })
+    } catch (error) {
+      console.error("Transaction failed:", error)
+      throw new Error("Failed to save slots: " + (error as Error).message)
+    }
   }
 
   async getSlotsWithProducts(
     machineId: string
   ): Promise<PublicSlotWithProductDTO[]> {
     const result = await this.database
-      .select()
+      .select({
+        slot: slots,
+        product: products,
+      })
       .from(slots)
-      .where(eq(slots.machineId, machineId))
       .leftJoin(products, eq(slots.productId, products.id))
+      .where(eq(slots.machineId, machineId))
+      .orderBy(slots.sequenceNumber)
 
-    return result.map((row) => {
-      // Parse row and column from labelCode (e.g., "A-1" -> row: "A", column: 0)
-      const [rowLabel, colStr] = row.slots.labelCode.split("-")
-      const column = parseInt(colStr) - 1 // Convert to 0-based index
-
-      return {
-        id: row.slots.id,
-        organizationId: row.slots.organizationId,
-        machineId: row.slots.machineId,
-        productId: row.slots.productId || "",
-        labelCode: row.slots.labelCode,
-        ccReaderCode: row.slots.ccReaderCode || "",
-        cardReaderId: row.slots.cardReaderId || "",
-        price: row.slots.price ? parseFloat(row.slots.price.toString()) : 0,
-        sequenceNumber: row.slots.sequenceNumber,
-        capacity: row.slots.capacity || 10,
-        currentQuantity: row.slots.currentQuantity || 0,
-        row: rowLabel,
-        column,
-        createdAt: row.slots.createdAt,
-        updatedAt: row.slots.updatedAt,
-        productName: row.products?.name || "",
-        productImage: row.products?.image || "",
-      }
-    })
+    return result.map((row) => ({
+      id: row.slot.id,
+      organizationId: row.slot.organizationId,
+      machineId: row.slot.machineId,
+      productId: row.slot.productId,
+      labelCode: row.slot.labelCode,
+      price: Number(row.slot.price),
+      sequenceNumber: row.slot.sequenceNumber,
+      capacity: row.slot.capacity ?? 10,
+      currentQuantity: row.slot.currentQuantity ?? 0,
+      productName: row.product?.name || "",
+      ccReaderCode: row.slot.ccReaderCode || undefined,
+      cardReaderId: row.slot.cardReaderId || undefined,
+      productImage: row.product?.image || undefined,
+    }))
   }
 
   private toEntity(data: typeof slots.$inferSelect): Slot {
