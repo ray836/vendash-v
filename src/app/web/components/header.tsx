@@ -22,6 +22,11 @@ export function Header() {
           href="/"
           className="flex items-center space-x-2 font-bold text-xl mr-6"
         >
+          <img
+            src="/vendashLogo.png"
+            alt="VendorPro Logo"
+            className="h-7 w-7 object-contain mr-1"
+          />
           <span>VendorPro</span>
         </Link>
         <div className="flex flex-1 items-center justify-end space-x-4">
