@@ -476,7 +476,8 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
             {machine.locationId}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Desktop buttons */}
+        <div className="hidden sm:flex items-center gap-2">
           <Button variant="outline" size="sm">
             <Settings className="h-4 w-4 mr-2" />
             Manage
@@ -492,6 +493,23 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
             </Button>
           )}
         </div>
+      </div>
+      {/* Mobile buttons */}
+      <div className="flex flex-col gap-2 mt-2 sm:hidden">
+        <Button variant="outline" size="sm">
+          <Settings className="h-4 w-4 mr-2" />
+          Manage
+        </Button>
+        {!isSetup && (
+          <Button size="sm" onClick={handleSetupClick}>
+            Setup Machine
+          </Button>
+        )}
+        {isSetup && (
+          <Button size="sm" onClick={handleSetupClick}>
+            Edit Configuration
+          </Button>
+        )}
       </div>
 
       <div className="space-y-6 mt-6">
