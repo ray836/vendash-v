@@ -143,8 +143,8 @@ export interface SalesChartProps {
 export function SalesChart({ data, isMobile, groupBy }: SalesChartProps) {
   const isWeekly = groupBy === "weekly"
   const margin = isWeekly
-    ? { top: 10, right: 40, left: 40, bottom: 70 }
-    : { top: 10, right: 10, left: 10, bottom: 30 }
+    ? { top: 10, right: 0, left: 0, bottom: 70 }
+    : { top: 10, right: 0, left: 0, bottom: 30 }
   const chartHeight = isWeekly ? 260 : 200
   return (
     <div style={{ width: "100%", height: chartHeight }}>
