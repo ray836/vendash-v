@@ -70,15 +70,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts"
+import { SalesChart, SalesChartData } from "@/components/SalesChart"
 
 interface MachineDetailsProps {
   id: string
@@ -132,35 +124,18 @@ const organizeSlotsByRow = (slots: PublicSlotWithProductDTO[]) => {
   }, {} as Record<string, PublicSlotWithProductDTO[]>)
 }
 
-// Custom tooltip for Recharts
-function CustomBarTooltip(props: any) {
-  const { active, payload, label } = props
-  if (!active || !payload || !payload.length) return null
-  const date = new Date(label as string)
-  const formattedDate = date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })
-  return (
-    <div
-      style={{
-        background: "#18181b",
-        color: "#fff",
-        borderRadius: 8,
-        padding: "0.75rem 1rem",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-        border: "1px solid #27272a",
-        minWidth: 90,
-      }}
-    >
-      <div style={{ fontSize: 13, color: "#a1a1aa", marginBottom: 4 }}>
-        {formattedDate}
-      </div>
-      <div style={{ fontWeight: 600, color: "#22c55e", fontSize: 16 }}>
-        ${payload[0].value?.toFixed(2)}
-      </div>
-    </div>
-  )
+// Hook to detect mobile devices (width < 640px)
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth < breakpoint)
+    }
+    handleResize()
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [breakpoint])
+  return isMobile
 }
 
 export default function MachineDetails({ id }: MachineDetailsProps) {
@@ -179,6 +154,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const [isLoadingSales, setIsLoadingSales] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupByType>(GroupByType.DAY)
   const [date, setDate] = useState<Date | undefined>(new Date())
+  const isMobile = useIsMobile()
 
   const fetchPreKit = async () => {
     if (!machineData) return
@@ -246,7 +222,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
       setIsLoadingSales(true)
       const endDate = new Date()
       const startDate = new Date()
-      startDate.setDate(startDate.getDate() - 30) // Last 90 days
+      startDate.setDate(startDate.getDate() - 90) // Last 90 days
 
       const response = await getMachineTransactions(id, startDate, endDate)
       if (response.success && response.data) {
@@ -453,6 +429,36 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
     { period: "2025-04-10", sales: 5 },
   ]
   console.log("Dummy chart data", dummyData)
+
+  // Helper to filter daily data to last 30 days
+  const now = new Date()
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(now.getDate() - 30)
+
+  const filteredDailyData = salesData?.daily
+    ? salesData.daily.filter((item) => {
+        // Use only item.createdAt for the date
+        const date = new Date(item.createdAt)
+        return date >= thirtyDaysAgo && date <= now
+      })
+    : []
+
+  // When preparing data for SalesChart, only pass last 15 items if on mobile
+  function getChartData(): SalesChartData[] {
+    if (!salesData) return []
+    let chartData: SalesChartData[] = []
+    if (groupBy === GroupByType.DAY) {
+      chartData = groupAndSum(filteredDailyData, "daily")
+    } else if (groupBy === GroupByType.WEEK) {
+      chartData = groupAndSum(salesData.weekly, "weekly")
+    } else if (groupBy === GroupByType.MONTH) {
+      chartData = groupAndSum(salesData.monthly, "monthly")
+    }
+    if (isMobile) {
+      return chartData.slice(-15)
+    }
+    return chartData
+  }
 
   return (
     <>
@@ -1086,15 +1092,17 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                     </div>
                   ) : salesData ? (
                     <SalesChart
-                      data={(() => {
-                        if (groupBy === GroupByType.DAY)
-                          return groupAndSum(salesData.daily, "daily")
-                        if (groupBy === GroupByType.WEEK)
-                          return groupAndSum(salesData.weekly, "weekly")
-                        if (groupBy === GroupByType.MONTH)
-                          return groupAndSum(salesData.monthly, "monthly")
-                        return []
-                      })()}
+                      data={getChartData()}
+                      isMobile={isMobile}
+                      groupBy={
+                        groupBy === GroupByType.DAY
+                          ? "daily"
+                          : groupBy === GroupByType.WEEK
+                          ? "weekly"
+                          : groupBy === GroupByType.MONTH
+                          ? "monthly"
+                          : undefined
+                      }
                     />
                   ) : (
                     <div className="flex items-center justify-center h-[300px] text-muted-foreground">
@@ -1207,46 +1215,5 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
         </Tabs>
       </div>
     </>
-  )
-}
-
-function SalesChart({ data }: { data: { period: string; sales: number }[] }) {
-  // Helper to format date as 'May 26'
-  function formatXAxisLabel(period: string) {
-    const date = new Date(period)
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-  }
-
-  return (
-    <div style={{ width: "100%", height: 200 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart
-          data={data}
-          margin={{ top: 10, right: 20, left: 0, bottom: 20 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-          <XAxis
-            dataKey="period"
-            tick={{ fill: "#888", fontSize: 12 }}
-            axisLine={false}
-            tickLine={false}
-            interval={0}
-            angle={0}
-            dy={10}
-            minTickGap={10}
-            tickFormatter={formatXAxisLabel}
-          />
-          <YAxis
-            tick={{ fill: "#888", fontSize: 12 }}
-            axisLine={false}
-            tickLine={false}
-            width={40}
-            tickFormatter={(v) => `$${v}`}
-          />
-          <RechartsTooltip content={<CustomBarTooltip />} />
-          <Bar dataKey="sales" fill="#22c55e" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
   )
 }
