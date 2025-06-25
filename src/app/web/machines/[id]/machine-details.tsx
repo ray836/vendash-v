@@ -60,16 +60,7 @@ import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
 import { PublicPreKitItem } from "@/domains/PreKit/schemas/PrekitSchemas"
 import { GetTransactionsForMachineResponseDTO } from "@/domains/Transaction/schemas/GetTransactionsForMachineSchema"
 import { TransactionSchemas } from "@/domains/Transaction/schemas/TransactionSchemas"
-import { formatDateLabel } from "@/utils/date"
 import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
-import { DayPicker } from "react-day-picker"
-import "react-day-picker/dist/style.css"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
 import { SalesChart, SalesChartData } from "@/components/SalesChart"
 
 interface MachineDetailsProps {
@@ -153,7 +144,6 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
     useState<GetTransactionsForMachineResponseDTO | null>(null)
   const [isLoadingSales, setIsLoadingSales] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupByType>(GroupByType.DAY)
-  const [date, setDate] = useState<Date | undefined>(new Date())
   const isMobile = useIsMobile()
 
   const fetchPreKit = async () => {
@@ -1039,32 +1029,6 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   <div className="flex justify-between items-center">
                     <h3 className="text-sm font-medium">Sales Overview</h3>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full sm:w-[240px] justify-start text-left font-normal",
-                              !date && "text-muted-foreground"
-                            )}
-                          >
-                            <Calendar className="mr-2 h-4 w-4" />
-                            {date ? (
-                              formatDateLabel(date.toISOString(), groupBy)
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <DayPicker
-                            mode="single"
-                            selected={date}
-                            onSelect={setDate}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
                       <div className="flex-1 min-w-0">
                         <Select
                           value={groupBy}
