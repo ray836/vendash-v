@@ -1038,13 +1038,13 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <h3 className="text-sm font-medium">Sales Overview</h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
                             variant={"outline"}
                             className={cn(
-                              "w-[240px] justify-start text-left font-normal",
+                              "w-full sm:w-[240px] justify-start text-left font-normal",
                               !date && "text-muted-foreground"
                             )}
                           >
@@ -1065,25 +1065,29 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                           />
                         </PopoverContent>
                       </Popover>
-                      <Select
-                        value={groupBy}
-                        onValueChange={(value: GroupByType) =>
-                          setGroupBy(value)
-                        }
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Select time range" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={GroupByType.DAY}>Daily</SelectItem>
-                          <SelectItem value={GroupByType.WEEK}>
-                            Weekly
-                          </SelectItem>
-                          <SelectItem value={GroupByType.MONTH}>
-                            Monthly
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="flex-1 min-w-0">
+                        <Select
+                          value={groupBy}
+                          onValueChange={(value: GroupByType) =>
+                            setGroupBy(value)
+                          }
+                        >
+                          <SelectTrigger className="w-full max-w-xs sm:max-w-[200px]">
+                            <SelectValue placeholder="Select time range" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={GroupByType.DAY}>
+                              Daily
+                            </SelectItem>
+                            <SelectItem value={GroupByType.WEEK}>
+                              Weekly
+                            </SelectItem>
+                            <SelectItem value={GroupByType.MONTH}>
+                              Monthly
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </div>
                   {isLoadingSales ? (
