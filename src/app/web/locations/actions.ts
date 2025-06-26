@@ -12,6 +12,8 @@ export async function getLocations(): Promise<string> {
   const drizzleLocationRepository = new DrizzleLocationRepository(db)
   const getLocationsUseCase = new GetLocationsUseCase(drizzleLocationRepository)
   const locations = await getLocationsUseCase.execute(organizationId)
+  console.log(locations)
+  console.log("iiiiikkkkkii")
   return JSON.stringify(locations)
 }
 

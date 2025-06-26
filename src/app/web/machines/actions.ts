@@ -6,6 +6,7 @@ import { GetVendingMachinesUseCase } from "@/domains/VendingMachine/use-cases/Ge
 import { UpdateVendingMachineStatusUseCase } from "@/domains/VendingMachine/use-cases/UpdateVendingMachineStatusUseCase"
 import { db } from "@/infrastructure/database"
 import { DrizzleVendingMachineRepository } from "@/infrastructure/repositories/DrizzleVendingMachineRepository"
+import { DrizzleLocationRepository } from "@/infrastructure/repositories/DrizzleLocationRepository"
 import {
   MachineStatus,
   MachineType,
@@ -13,8 +14,9 @@ import {
 
 const organizationId = "1"
 
-// Cache the repository instance
+// Cache the repository instances
 const repository = new DrizzleVendingMachineRepository(db)
+const locationRepository = new DrizzleLocationRepository(db)
 
 export async function createMachine(machine: {
   type: MachineType
@@ -39,7 +41,10 @@ export async function createMachine(machine: {
 
 export async function getMachines() {
   try {
-    const getVendingMachinesUseCase = new GetVendingMachinesUseCase(repository)
+    const getVendingMachinesUseCase = new GetVendingMachinesUseCase(
+      repository,
+      locationRepository
+    )
     const machines = await getVendingMachinesUseCase.execute(organizationId)
     return JSON.stringify(machines)
   } catch (error) {

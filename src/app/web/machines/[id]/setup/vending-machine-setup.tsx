@@ -3,8 +3,6 @@
 import { useState, useEffect } from "react"
 import { ArrowLeft, Minus, ArrowDown, ArrowRight } from "lucide-react"
 import Link from "next/link"
-import { useToast } from "@/hooks/use-toast"
-
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -24,7 +22,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { PublicProductDTO } from "@/domains/Product/schemas/ProductSchemas"
-import { saveSlots, updateMachine, getMachine } from "./actions"
+import {
+  saveSlots,
+  updateMachine,
+  getMachine,
+  updateMachineInfo,
+} from "./actions"
 import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import {
   Popover,
@@ -35,6 +38,7 @@ import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
 import { PublicVendingMachineDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
 import { z } from "zod"
 import { SlotSchemas } from "@/domains/Slot/schemas/SlotSchemas"
+import { MachineSettingsDialog } from "./MachineSettingsDialog"
 // Separate products by type
 // const products = { drinks: [...], snacks: [...] }
 
@@ -464,6 +468,7 @@ interface VendingMachineSetupProps {
   products: PublicProductDTO[]
   initialSlots: PublicSlotWithProductDTO[]
   machineType: MachineType
+  locations: { id: string; name: string }[]
 }
 
 export function VendingMachineSetup({
@@ -471,6 +476,7 @@ export function VendingMachineSetup({
   products,
   initialSlots,
   machineType: initialMachineType,
+  locations,
 }: VendingMachineSetupProps) {
   // Initialize all state with basic values
   const [machine, setMachine] = useState<PublicVendingMachineDTO | null>(null)
@@ -485,6 +491,7 @@ export function VendingMachineSetup({
   const [activeSlot, setActiveSlot] = useState<Slot | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("products")
+  const [isSavingInfo, setIsSavingInfo] = useState(false)
 
   // Initialize everything in one effect
   useEffect(() => {
@@ -760,6 +767,29 @@ export function VendingMachineSetup({
     setActiveSlot({ ...activeSlot, ...updates })
   }
 
+  // Handler for saving machine info
+  const handleSaveMachineInfo = async (machineInfo: {
+    model: string
+    notes: string
+    locationId: string
+  }) => {
+    try {
+      setIsSavingInfo(true)
+      const result = await updateMachineInfo(machine!.id, machineInfo)
+      const response = JSON.parse(result)
+      if (response.success) {
+        // Optionally update local machine state here
+      } else {
+        throw new Error(response.error || "Failed to update machine info")
+      }
+    } catch (error) {
+      // Optionally show a toast here
+      console.error(error)
+    } finally {
+      setIsSavingInfo(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -788,13 +818,16 @@ export function VendingMachineSetup({
                     Configure machine hardware settings
                   </p>
                 </div>
-                <MachineSettings
+                <MachineSettingsDialog
                   machine={machine}
                   onUpdate={async (cardReaderId: string) => {
                     await updateMachine(machineId, { cardReaderId })
                     const updatedMachine = await getMachine(machineId)
                     setMachine(updatedMachine)
                   }}
+                  locations={locations}
+                  onSaveMachineInfo={handleSaveMachineInfo}
+                  isSavingInfo={isSavingInfo}
                 />
               </div>
             </PopoverContent>
@@ -934,63 +967,6 @@ export function VendingMachineSetup({
             </TabsContent>
           </Tabs>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function MachineSettings({
-  machine,
-  onUpdate,
-}: {
-  machine: PublicVendingMachineDTO
-  onUpdate: (cardReaderId: string) => Promise<void>
-}) {
-  const { toast } = useToast()
-  const [isSaving, setIsSaving] = useState(false)
-  const [cardReaderId, setCardReaderId] = useState(machine.cardReaderId || "")
-
-  const handleCardReaderUpdate = async (newCardReaderId: string) => {
-    try {
-      setIsSaving(true)
-      await onUpdate(newCardReaderId)
-      toast({
-        title: "Success",
-        description: "Card reader ID updated successfully",
-      })
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to update card reader ID",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  return (
-    <div className="space-y-4 p-4">
-      <div className="space-y-2">
-        <Label htmlFor="cardReaderId">Card Reader ID</Label>
-        <div className="flex gap-2">
-          <Input
-            id="cardReaderId"
-            value={cardReaderId}
-            onChange={(e) => setCardReaderId(e.target.value)}
-            placeholder="Enter card reader ID"
-          />
-          <span>{machine.cardReaderId} here</span>
-          <Button
-            onClick={() => handleCardReaderUpdate(cardReaderId)}
-            disabled={isSaving}
-          >
-            {isSaving ? "Saving..." : "Save"}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          This ID is used to associate transactions with this machine
-        </p>
       </div>
     </div>
   )

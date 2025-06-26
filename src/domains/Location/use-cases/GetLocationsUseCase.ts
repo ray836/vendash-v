@@ -8,6 +8,8 @@ export class GetLocationsUseCase {
     const locations = await this.locationRepository.findByOrganizationId(
       organizationId
     )
+    console.log(locations)
+    console.log("iiiiiii")
     return locations.map((location) => ({
       id: location.id,
       name: location.name,

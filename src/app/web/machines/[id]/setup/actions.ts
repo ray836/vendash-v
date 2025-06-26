@@ -5,12 +5,17 @@ import { db } from "@/infrastructure/database"
 import { SaveSlotsUseCase } from "@/domains/Slot/use-cases/SaveSlotsUseCase"
 import { DrizzleSlotRepository } from "@/infrastructure/repositories/DrizzleSlotRepository"
 import { DrizzleVendingMachineRepository } from "@/infrastructure/repositories/DrizzleVendingMachineRepository"
+import { DrizzleLocationRepository } from "@/infrastructure/repositories/DrizzleLocationRepository"
 import { GetMachineWithSlotsUseCase } from "@/domains/VendingMachine/use-cases/GetMachineWithSlotsUseCase"
 import { GetVendingMachineUseCase } from "@/domains/VendingMachine/use-cases/GetVendingMachineUseCase"
 import { UpdateMachineCardReaderUseCase } from "@/domains/VendingMachine/use-cases/UpdateMachineCardReaderUseCase"
 import { PublicVendingMachineDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
 import { PublicSlotDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import { GetOrgProductsUseCase } from "@/domains/Product/use-cases/GetOrgProducts"
+import { UpdateVendingMachineInfoRequestDTO } from "@/domains/VendingMachine/schemas/UpdateVendingMachineInfoSchemas"
+import { UpdateVendingMachineInfoUseCase } from "@/domains/VendingMachine/use-cases/UpdateVendingMachineInfoUseCase"
+import { GetLocationsUseCase } from "@/domains/Location/use-cases/GetLocationsUseCase"
+
 // get products for machine
 
 export async function getOrgProducts() {
@@ -34,9 +39,11 @@ export async function getOrgProducts() {
 export async function getMachineWithSlots(machineId: string) {
   const machineRepo = new DrizzleVendingMachineRepository(db)
   const slotRepo = new DrizzleSlotRepository(db)
+  const locationRepo = new DrizzleLocationRepository(db)
   const getMachineWithSlotsUseCase = new GetMachineWithSlotsUseCase(
     machineRepo,
-    slotRepo
+    slotRepo,
+    locationRepo
   )
 
   try {
@@ -109,4 +116,36 @@ export async function updateMachine(
     console.error("Failed to update machine:", error)
     throw new Error("Failed to update machine configuration")
   }
+}
+
+export async function updateMachineInfo(
+  id: string,
+  updateData: UpdateVendingMachineInfoRequestDTO
+) {
+  try {
+    const machineRepo = new DrizzleVendingMachineRepository(db)
+    const updateVendingMachineInfoUseCase = new UpdateVendingMachineInfoUseCase(
+      machineRepo
+    )
+    const result = await updateVendingMachineInfoUseCase.execute(id, updateData)
+    return JSON.stringify({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    return JSON.stringify({
+      success: false,
+      error:
+        error instanceof Error ? error.message : "An unknown error occurred",
+      data: null,
+    })
+  }
+}
+
+export async function getLocationsServer() {
+  const repo = new DrizzleLocationRepository(db)
+  const useCase = new GetLocationsUseCase(repo)
+  // Use your actual org ID here
+  const orgId = "1"
+  return await useCase.execute(orgId)
 }

@@ -18,6 +18,7 @@ interface VendingMachine {
   id: string
   type: "DRINK" | "SNACK"
   locationId: string
+  locationName?: string
   model: string
   notes: string
   organizationId: string
@@ -26,10 +27,11 @@ interface VendingMachine {
 }
 
 // Sample vending machine data
-const vendingMachines: VendingMachine[] = [
+/*const vendingMachines: VendingMachine[] = [
   {
     id: "VM001",
     locationId: "Main Building, Floor 1",
+    locationName: "Main Building, Floor 1",
     type: "DRINK",
     status: "Online",
     model: "Drink Machine",
@@ -40,6 +42,7 @@ const vendingMachines: VendingMachine[] = [
   {
     id: "VM002",
     locationId: "Science Block, Floor 2",
+    locationName: "Science Block, Floor 2",
     type: "SNACK",
     status: "Online",
     model: "Snack Machine",
@@ -50,6 +53,7 @@ const vendingMachines: VendingMachine[] = [
   {
     id: "VM003",
     locationId: "Library, Floor 1",
+    locationName: "Library, Floor 1",
     type: "SNACK",
     status: "Maintenance",
     model: "Snack Machine",
@@ -60,6 +64,7 @@ const vendingMachines: VendingMachine[] = [
   {
     id: "VM004",
     locationId: "Student Center",
+    locationName: "Student Center",
     type: "SNACK",
     status: "Online",
     model: "Snack Machine",
@@ -70,6 +75,7 @@ const vendingMachines: VendingMachine[] = [
   {
     id: "VM005",
     locationId: "Sports Complex",
+    locationName: "Sports Complex",
     type: "SNACK",
     status: "Low Stock",
     model: "Snack Machine",
@@ -80,6 +86,7 @@ const vendingMachines: VendingMachine[] = [
   {
     id: "VM006",
     locationId: "Engineering Building, Floor 3",
+    locationName: "Engineering Building, Floor 3",
     type: "SNACK",
     status: "Online",
     model: "Snack Machine",
@@ -87,7 +94,7 @@ const vendingMachines: VendingMachine[] = [
     organizationId: "University",
     cardReaderId: null,
   },
-]
+]*/
 
 // Component for a single vending machine card
 function VendingMachineCard({ machine }: { machine: VendingMachine }) {
@@ -124,7 +131,7 @@ function VendingMachineCard({ machine }: { machine: VendingMachine }) {
         </div>
         <CardDescription className="flex items-center mt-1">
           <MapPin className="h-3.5 w-3.5 mr-1" />
-          {machine.locationId}
+          {machine.locationName}
         </CardDescription>
       </CardHeader>
       <CardContent>

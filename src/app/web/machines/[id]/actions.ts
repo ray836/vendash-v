@@ -2,6 +2,7 @@
 import { GetMachineWithSlotsUseCase } from "@/domains/VendingMachine/use-cases/GetMachineWithSlotsUseCase"
 import { DrizzleVendingMachineRepository } from "@/infrastructure/repositories/DrizzleVendingMachineRepository"
 import { DrizzleSlotRepository } from "@/infrastructure/repositories/DrizzleSlotRepository"
+import { DrizzleLocationRepository } from "@/infrastructure/repositories/DrizzleLocationRepository"
 import { db } from "@/infrastructure/database"
 import { DrizzlePreKitRepository } from "@/infrastructure/repositories/DrizzlePreKitRepository"
 import { CreatePreKitUseCase } from "@/domains/PreKit/use-cases/CreatePreKitUseCase"
@@ -25,9 +26,11 @@ import { DrizzleTransactionRepository } from "@/infrastructure/repositories/Driz
 export async function getMachineWithSlots(machineId: string) {
   const machineRepo = new DrizzleVendingMachineRepository(db)
   const slotRepo = new DrizzleSlotRepository(db)
+  const locationRepo = new DrizzleLocationRepository(db)
   const getMachineWithSlotsUseCase = new GetMachineWithSlotsUseCase(
     machineRepo,
-    slotRepo
+    slotRepo,
+    locationRepo
   )
 
   try {

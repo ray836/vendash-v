@@ -473,7 +473,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
           </div>
           <p className="text-muted-foreground flex items-center">
             <MapPin className="h-4 w-4 mr-1" />
-            {machine.locationId}
+            {machine.locationName}
           </p>
         </div>
         {/* Desktop buttons */}

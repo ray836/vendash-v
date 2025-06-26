@@ -24,6 +24,8 @@ export const BaseVendingMachineDTO = z.object({
 export const PublicVendingMachineDTO = BaseVendingMachineDTO.omit({
   createdBy: true,
   updatedBy: true,
+}).extend({
+  locationName: z.string().optional(),
 })
 
 export const CreateVendingMachineRequestDTO = z.object({
@@ -36,6 +38,7 @@ export const CreateVendingMachineRequestDTO = z.object({
 })
 
 export const MachineWithSlotsDTO = PublicVendingMachineDTO.extend({
+  locationName: z.string().optional(),
   slots: z.array(SlotSchemas.publicWithProduct),
   setup: z.object({
     status: z.enum(["complete", "incomplete"]),

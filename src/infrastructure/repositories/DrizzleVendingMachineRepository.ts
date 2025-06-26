@@ -4,6 +4,7 @@ import {
   MachineType,
 } from "@/domains/VendingMachine/entities/VendingMachine"
 import { IVendingMachineRepository } from "@/domains/VendingMachine/interfaces/IVendingMachineRepository"
+import { UpdateVendingMachineInfoRequestDTO } from "@/domains/VendingMachine/schemas/UpdateVendingMachineInfoSchemas"
 import { db } from "../database"
 import { vendingMachines } from "../database/schema"
 import { eq } from "drizzle-orm"
@@ -133,5 +134,58 @@ export class DrizzleVendingMachineRepository
     await this.database
       .delete(vendingMachines)
       .where(eq(vendingMachines.id, id))
+  }
+
+  async updateInfo(
+    id: string,
+    updateData: UpdateVendingMachineInfoRequestDTO
+  ): Promise<VendingMachine> {
+    // Map the schema fields to existing database fields
+    const updateFields: {
+      model?: string
+      notes?: string
+      locationId?: string
+      updatedAt: Date
+      updatedBy: string
+    } = {
+      updatedAt: new Date(),
+      updatedBy: "1", // TODO: Get actual user ID from context
+    }
+
+    if (updateData.model !== undefined) {
+      updateFields.model = updateData.model // Map name to model field
+    }
+
+    if (updateData.notes !== undefined) {
+      updateFields.notes = updateData.notes // Map description to notes field
+    }
+
+    if (updateData.locationId !== undefined) {
+      updateFields.locationId = updateData.locationId // Map location to locationId field
+    }
+
+    // Note: imageUrl is not supported in current schema
+    // TODO: Add imageUrl field to database schema if needed
+
+    const [machine] = await this.database
+      .update(vendingMachines)
+      .set(updateFields)
+      .where(eq(vendingMachines.id, id))
+      .returning()
+
+    return new VendingMachine({
+      id: machine.id,
+      type: machine.type as MachineType,
+      locationId: machine.locationId,
+      model: machine.model,
+      notes: machine.notes ?? undefined,
+      status: machine.status as MachineStatus,
+      organizationId: machine.organizationId,
+      cardReaderId: machine.cardReaderId ?? undefined,
+      createdAt: machine.createdAt,
+      updatedAt: machine.updatedAt,
+      createdBy: machine.createdBy,
+      updatedBy: machine.updatedBy,
+    })
   }
 }
