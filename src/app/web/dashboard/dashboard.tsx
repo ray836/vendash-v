@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
-  BarChart3,
   TrendingUp,
+  TrendingDown,
   Package,
   AlertTriangle,
   ShoppingCart,
@@ -36,9 +36,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getTransactionGraphData } from "./actions"
+import { getTransactionGraphData, getDashboardData } from "./actions"
 import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
 import { formatDateLabel, formatWeekRangeLabel } from "@/utils/date"
+import { useRole } from "@/lib/role-context"
+import { UserRole } from "@/domains/User/entities/User"
+import { useRouter } from "next/navigation"
 import {
   Tooltip,
   TooltipContent,
@@ -46,167 +49,20 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-// Sample dashboard data - in a real app, this would come from your backend
-const dashboardData = {
-  summary: {
-    totalMachines: 12,
-    activeMachines: 10,
-    totalProducts: 24,
-    totalRevenue: "$12,845.75",
-    dailyRevenue: "$1,245.50",
-    weeklyRevenue: "$8,762.25",
-    monthlySales: 4250,
-    monthlyRevenue: "$12,845.75",
-  },
-  alerts: {
-    critical: 2,
-    warning: 3,
-    maintenance: 1,
-  },
-  inventory: {
-    lowStock: 4,
-    outOfStock: 1,
-    reorderNeeded: 3,
-    totalStock: 85, // percentage
-  },
-  machines: [
-    {
-      id: "VM001",
-      location: "Main Building, Floor 1",
-      status: "Online",
-      inventory: 87,
-      revenue: "$1,245.50",
-    },
-    {
-      id: "VM002",
-      location: "Science Block, Floor 2",
-      status: "Online",
-      inventory: 62,
-      revenue: "$876.25",
-    },
-    {
-      id: "VM003",
-      location: "Library, Floor 1",
-      status: "Maintenance",
-      inventory: 45,
-      revenue: "$523.75",
-    },
-    {
-      id: "VM004",
-      location: "Student Center",
-      status: "Online",
-      inventory: 91,
-      revenue: "$1,102.00",
-    },
-  ],
-  products: [
-    {
-      id: "4",
-      name: "Doritos",
-      inventory: 85,
-      status: "critical",
-      daysLeft: 3,
-    },
-    {
-      id: "6",
-      name: "Snickers",
-      inventory: 60,
-      status: "critical",
-      daysLeft: 2,
-    },
-    {
-      id: "3",
-      name: "Sprite",
-      inventory: 120,
-      status: "warning",
-      daysLeft: 8,
-    },
-    {
-      id: "8",
-      name: "Twix",
-      inventory: 90,
-      status: "warning",
-      daysLeft: 7,
-    },
-  ],
-  recentActivity: [
-    {
-      type: "sale",
-      machine: "VM001",
-      product: "Coca-Cola",
-      time: "10 minutes ago",
-      amount: "$2.50",
-    },
-    {
-      type: "restock",
-      machine: "VM003",
-      time: "2 hours ago",
-      user: "John Doe",
-    },
-    {
-      type: "maintenance",
-      machine: "VM005",
-      time: "Yesterday, 3:45 PM",
-      user: "Jane Smith",
-    },
-    {
-      type: "alert",
-      machine: "VM002",
-      time: "Yesterday, 2:30 PM",
-      message: "Low inventory alert",
-    },
-    {
-      type: "sale",
-      machine: "VM004",
-      product: "Snickers",
-      time: "Yesterday, 1:15 PM",
-      amount: "$1.50",
-    },
-  ],
-  salesData: {
-    daily: [
-      { day: "Mon", sales: 145 },
-      { day: "Tue", sales: 132 },
-      { day: "Wed", sales: 164 },
-      { day: "Thu", sales: 156 },
-      { day: "Fri", sales: 178 },
-      { day: "Sat", sales: 210 },
-      { day: "Sun", sales: 190 },
-    ],
-    weekly: [
-      { week: "Week 1", sales: 1050 },
-      { week: "Week 2", sales: 980 },
-      { week: "Week 3", sales: 1100 },
-      { week: "Week 4", sales: 1200 },
-    ],
-    monthly: [
-      { month: "Jan", sales: 4200 },
-      { month: "Feb", sales: 3800 },
-      { month: "Mar", sales: 4100 },
-      { month: "Apr", sales: 4300 },
-      { month: "May", sales: 4500 },
-      { month: "Jun", sales: 4800 },
-      { month: "Jul", sales: 5100 },
-      { month: "Aug", sales: 5300 },
-      { month: "Sep", sales: 5200 },
-      { month: "Oct", sales: 5400 },
-      { month: "Nov", sales: 5600 },
-      { month: "Dec", sales: 6000 },
-    ],
-  },
-}
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "Online") {
+  if (status === "Online" || status === "ONLINE") {
     return <Badge className="bg-green-600">Online</Badge>
-  } else if (status === "Maintenance") {
+  } else if (status === "Maintenance" || status === "MAINTENANCE") {
     return <Badge variant="destructive">Maintenance</Badge>
-  } else if (status === "Offline") {
+  } else if (status === "Offline" || status === "OFFLINE") {
     return (
       <Badge variant="outline" className="text-muted-foreground">
         Offline
       </Badge>
     )
+  } else if (status === "LOW_STOCK") {
+    return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Low Stock</Badge>
   } else if (status === "critical") {
     return (
       <Badge
@@ -238,6 +94,13 @@ type SalesData = {
 }
 
 // Update the component to properly type check
+function labelInterval(n: number): number {
+  if (n <= 12) return 1
+  if (n <= 31) return 7
+  if (n <= 90) return 14
+  return 30
+}
+
 function SalesChart({
   data,
   period,
@@ -246,24 +109,28 @@ function SalesChart({
   period: GroupByType
 }) {
   const maxSales = Math.max(...data.map((item) => item.totalSales))
+  const interval = labelInterval(data.length)
 
   return (
-    <div className="h-[200px] flex items-end gap-2">
+    <div className="w-full overflow-hidden">
+      <div className="flex items-end gap-[2px]" style={{ height: 220 }}>
       {data.map((item, i) => {
-        const height = (item.totalSales / maxSales) * 200 // 200px container height
+        const height = (item.totalSales / maxSales) * 180
         const date = new Date(item.date)
         const dayOfWeek = date.toLocaleString("default", { weekday: "short" })
+        const showLabel = i % interval === 0 || i === data.length - 1
 
         return (
           <div
             key={i}
-            className="flex-1 flex flex-col justify-end items-center h-[220px]"
+            className="flex-1 flex flex-col justify-end items-center min-w-0"
+            style={{ height: 220 }}
           >
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div
-                    className="w-full bg-green-500 hover:bg-primary rounded-t-sm transition-colors mb-3 cursor-pointer"
+                    className="w-full bg-green-500 hover:bg-primary rounded-t-sm transition-colors cursor-pointer"
                     style={{ height: `${height}px` }}
                   />
                 </TooltipTrigger>
@@ -286,23 +153,32 @@ function SalesChart({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <div className="flex flex-col items-center">
-              <span className="text-xs text-muted-foreground">
-                {period === GroupByType.WEEK
-                  ? formatWeekRangeLabel(item.date)
-                  : formatDateLabel(item.date, period)}
-              </span>
-              {period === GroupByType.DAY && (
-                <span className="text-[10px] text-muted-foreground/60">
-                  {dayOfWeek}
+            <div className="h-[20px] flex flex-col items-center justify-start mt-1 w-full">
+              {showLabel && (
+                <span className="text-[9px] text-muted-foreground leading-none text-center whitespace-nowrap">
+                  {period === GroupByType.WEEK
+                    ? formatWeekRangeLabel(item.date)
+                    : formatDateLabel(item.date, period)}
                 </span>
               )}
             </div>
           </div>
         )
       })}
+      </div>
     </div>
   )
+}
+
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return "Just now"
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days === 1 ? "" : "s"} ago`
 }
 
 function ActivityIcon({ type }: { type: string }) {
@@ -320,16 +196,37 @@ function ActivityIcon({ type }: { type: string }) {
   }
 }
 
+type DashboardStats = Awaited<ReturnType<typeof getDashboardData>>
+
 export function Dashboard() {
+  const { role } = useRole()
+  const router = useRouter()
   const [salesPeriod, setSalesPeriod] = useState<GroupByType>(GroupByType.DAY)
   const [salesData, setSalesData] = useState<SalesData[]>([])
   const [loading, setLoading] = useState(false)
   const [totalSales, setTotalSales] = useState(0)
   const [averageSales, setAverageSales] = useState(0)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(true)
 
   useEffect(() => {
+    if (role === UserRole.DRIVER) {
+      router.replace("/web/routes")
+    }
+  }, [role, router])
+
+  if (role === UserRole.DRIVER) return null
+
+  const loadStats = () => {
+    setStatsLoading(true)
+    getDashboardData()
+      .then(setStats)
+      .finally(() => setStatsLoading(false))
+  }
+
+  const loadChart = (period: GroupByType) => {
     setLoading(true)
-    getTransactionGraphData(salesPeriod)
+    getTransactionGraphData(period)
       .then((res) => {
         if (res.success && res.data) {
           setSalesData(res.data.groupedData)
@@ -338,7 +235,11 @@ export function Dashboard() {
         }
       })
       .finally(() => setLoading(false))
-  }, [salesPeriod])
+  }
+
+  useEffect(() => { loadStats() }, [])
+
+  useEffect(() => { loadChart(salesPeriod) }, [salesPeriod])
 
   return (
     <div className="space-y-6">
@@ -350,8 +251,13 @@ export function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { loadStats(); loadChart(salesPeriod) }}
+            disabled={statsLoading || loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${statsLoading || loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
           <Button size="sm">
@@ -365,25 +271,37 @@ export function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">Today&apos;s Revenue</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center">
-              <DollarSign className="h-5 w-5 mr-2 text-primary" />
               <span className="text-2xl font-bold">
-                {loading
-                  ? "$0.00"
-                  : `$${totalSales.toLocaleString(undefined, {
+                {statsLoading
+                  ? "—"
+                  : `$${(stats?.todayRevenue ?? 0).toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}`}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <TrendingUp className="h-3 w-3 inline mr-1 text-green-600" />
-              <span className="text-green-600 font-medium">+12.5%</span> from
-              last month
-            </p>
+            <div className="flex items-center gap-1 mt-1">
+              {!statsLoading && stats?.todayVsYesterdayPct != null ? (
+                <>
+                  {stats.todayVsYesterdayPct >= 0 ? (
+                    <TrendingUp className="h-3 w-3 text-green-600" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3 text-red-500" />
+                  )}
+                  <p className={`text-xs font-medium ${stats.todayVsYesterdayPct >= 0 ? "text-green-600" : "text-red-500"}`}>
+                    {stats.todayVsYesterdayPct >= 0 ? "+" : ""}{stats.todayVsYesterdayPct.toFixed(0)}% vs yesterday
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {statsLoading ? "" : `$${(stats?.yesterdayRevenue ?? 0).toFixed(2)} yesterday`}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -397,14 +315,11 @@ export function Dashboard() {
             <div className="flex items-center">
               <Truck className="h-5 w-5 mr-2 text-primary" />
               <span className="text-2xl font-bold">
-                {dashboardData.summary.activeMachines}/
-                {dashboardData.summary.totalMachines}
+                {statsLoading ? "—" : `${stats?.activeMachines ?? 0}/${stats?.totalMachines ?? 0}`}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {dashboardData.summary.totalMachines -
-                dashboardData.summary.activeMachines}{" "}
-              machines need attention
+              {statsLoading ? "" : `${(stats?.totalMachines ?? 0) - (stats?.activeMachines ?? 0)} machines need attention`}
             </p>
           </CardContent>
         </Card>
@@ -419,18 +334,16 @@ export function Dashboard() {
             <div className="flex items-center">
               <Package className="h-5 w-5 mr-2 text-primary" />
               <span className="text-2xl font-bold">
-                {dashboardData.inventory.totalStock}%
+                {statsLoading ? "—" : `${stats?.inventoryPct ?? 0}%`}
               </span>
             </div>
             <div className="mt-2">
-              <Progress
-                value={dashboardData.inventory.totalStock}
-                className="h-2"
-              />
+              <Progress value={stats?.inventoryPct ?? 0} className="h-2" />
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {dashboardData.inventory.lowStock} products low,{" "}
-              {dashboardData.inventory.outOfStock} out of stock
+              {statsLoading
+                ? ""
+                : `${stats?.lowStockCount ?? 0} products low, ${stats?.outOfStockCount ?? 0} out of stock`}
             </p>
           </CardContent>
         </Card>
@@ -443,13 +356,11 @@ export function Dashboard() {
             <div className="flex items-center">
               <ShoppingCart className="h-5 w-5 mr-2 text-primary" />
               <span className="text-2xl font-bold">
-                {dashboardData.summary.monthlySales}
+                {statsLoading ? "—" : (stats?.monthlySalesCount ?? 0)}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              <TrendingUp className="h-3 w-3 inline mr-1 text-green-600" />
-              <span className="text-green-600 font-medium">+8.2%</span> from
-              last month
+              transactions this month
             </p>
           </CardContent>
         </Card>
@@ -536,34 +447,37 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {dashboardData.recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-start gap-3">
-                  <div className="mt-0.5">
-                    <ActivityIcon type={activity.type} />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium">
-                      {activity.type === "sale" &&
-                        `Sale: ${activity.product} from ${activity.machine}`}
-                      {activity.type === "restock" &&
-                        `Restock: ${activity.machine} by ${activity.user}`}
-                      {activity.type === "maintenance" &&
-                        `Maintenance: ${activity.machine} by ${activity.user}`}
-                      {activity.type === "alert" &&
-                        `Alert: ${activity.message} on ${activity.machine}`}
-                    </p>
-                    <div className="flex justify-between">
-                      <p className="text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3 inline mr-1" />
-                        {activity.time}
-                      </p>
-                      {activity.amount && (
-                        <p className="text-xs font-medium">{activity.amount}</p>
-                      )}
+              {statsLoading ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : (stats?.recentTransactions ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent transactions</p>
+              ) : (
+                (stats?.recentTransactions ?? []).map((tx, index) => {
+                  const firstItem = tx.items?.[0]
+                  const productName = firstItem?.product?.name ?? "Unknown product"
+                  const machineLabel = tx.vendingMachineId ?? tx.cardReaderId ?? "Unknown machine"
+                  const timeAgo = formatTimeAgo(new Date(tx.createdAt))
+                  return (
+                    <div key={tx.id ?? index} className="flex items-start gap-3">
+                      <div className="mt-0.5">
+                        <ShoppingCart className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <p className="text-sm font-medium">
+                          Sale: {productName}{tx.items?.length > 1 ? ` +${tx.items.length - 1} more` : ""} — {machineLabel}
+                        </p>
+                        <div className="flex justify-between">
+                          <p className="text-xs text-muted-foreground">
+                            <Clock className="h-3 w-3 inline mr-1" />
+                            {timeAgo}
+                          </p>
+                          <p className="text-xs font-medium">${tx.total.toFixed(2)}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  )
+                })
+              )}
             </div>
           </CardContent>
           <CardFooter>
@@ -593,50 +507,39 @@ export function Dashboard() {
                   <Button size="sm">View All Machines</Button>
                 </Link>
               </div>
-              <CardDescription>
-                Overview of your vending machines
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {dashboardData.machines.map((machine) => (
-                  <Card key={machine.id} className="border-none shadow-none">
-                    <CardHeader className="p-4 pb-2">
+                {statsLoading ? (
+                  <p className="text-sm text-muted-foreground col-span-4">Loading…</p>
+                ) : (stats?.machines ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground col-span-4">No machines found</p>
+                ) : (
+                  (stats?.machines ?? []).map((machine) => (
+                    <div key={machine.id} className="border rounded-lg p-4 flex flex-col gap-3">
                       <div className="flex justify-between items-start">
-                        <CardTitle className="text-base">
-                          {machine.id}
-                        </CardTitle>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm leading-tight">{machine.model}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{machine.locationName ?? machine.locationId}</p>
+                        </div>
                         <StatusBadge status={machine.status} />
                       </div>
-                      <CardDescription className="text-xs">
-                        {machine.location}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0">
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div>
-                          <p className="text-xs text-muted-foreground">
-                            Inventory
-                          </p>
-                          <p className="font-medium">{machine.inventory}%</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">
-                            Revenue
-                          </p>
-                          <p className="font-medium">{machine.revenue}</p>
-                        </div>
+                      <div className="border-t pt-3">
+                        {machine.revenue === null ? (
+                          <p className="text-xs text-muted-foreground italic">No card reader configured</p>
+                        ) : (
+                          <div>
+                            <p className="text-xs text-muted-foreground">Revenue (all-time)</p>
+                            <p className="text-lg font-semibold">${machine.revenue.toFixed(2)}</p>
+                          </div>
+                        )}
                       </div>
-                    </CardContent>
-                    <CardFooter className="p-4 pt-0">
-                      <Link href={`/machines/${machine.id}`} className="w-full">
-                        <Button variant="outline" size="sm" className="w-full">
-                          View Details
-                        </Button>
+                      <Link href={`/web/machines/${machine.id}`}>
+                        <Button variant="outline" size="sm" className="w-full">View Details</Button>
                       </Link>
-                    </CardFooter>
-                  </Card>
-                ))}
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -644,70 +547,114 @@ export function Dashboard() {
 
         {/* Products Tab */}
         <TabsContent value="products" className="mt-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Product Inventory</CardTitle>
-                <Link href="products">
-                  <Button size="sm">View All Products</Button>
-                </Link>
-              </div>
-              <CardDescription>Products that need attention</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {dashboardData.products.map((product) => (
-                  <div
-                    key={product.id}
-                    className="flex items-center justify-between p-3 border rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <StatusBadge status={product.status} />
-                      <div>
-                        <p className="font-medium">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Inventory: {product.inventory} units
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p
-                          className={`text-sm font-medium ${
-                            product.daysLeft <= 3
-                              ? "text-red-600"
-                              : product.daysLeft <= 7
-                              ? "text-yellow-600"
-                              : ""
-                          }`}
-                        >
-                          {product.daysLeft} days left
-                        </p>
-                      </div>
-                      <Link href={`/products/${product.id}`}>
-                        <Button size="sm" variant="outline">
-                          Details
-                        </Button>
-                      </Link>
-                    </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Needs Attention */}
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Needs Attention</CardTitle>
+                    <CardDescription>Running low based on sales velocity</CardDescription>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between border-t pt-4">
-              <div className="text-sm text-muted-foreground">
-                <AlertTriangle className="h-4 w-4 inline mr-1 text-yellow-600" />
-                {dashboardData.inventory.reorderNeeded} products need to be
-                reordered
-              </div>
-              <Link href="/products">
-                <Button variant="outline" size="sm">
-                  Manage Inventory
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
-            </CardFooter>
-          </Card>
+                  <Link href="/web/products">
+                    <Button size="sm" variant="outline">View All</Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {statsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : (stats?.attentionProducts ?? []).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center mb-2">
+                      <TrendingUp className="h-4 w-4 text-green-600" />
+                    </div>
+                    <p className="text-sm font-medium">All products well stocked</p>
+                    <p className="text-xs text-muted-foreground mt-1">No products need reordering right now</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {(stats?.attentionProducts ?? []).map((p) => {
+                      const daysLeft = Math.round(p.salesData.daysToSellOut)
+                      const isOutOfStock = p.inventory.total === 0
+                      const isCritical = isOutOfStock || daysLeft < 3
+                      return (
+                        <div key={p.product.id} className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`h-2 w-2 rounded-full shrink-0 ${isCritical ? "bg-red-500" : "bg-yellow-500"}`} />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{p.product.name}</p>
+                              <p className="text-xs text-muted-foreground">{p.inventory.total} units</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-xs font-medium ${isCritical ? "text-red-600" : "text-yellow-600"}`}>
+                              {isOutOfStock ? "Out of stock" : `~${daysLeft}d`}
+                            </span>
+                            <Link href={`/web/products/${p.product.id}`}>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs">View</Button>
+                            </Link>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+              {(stats?.lowStockCount ?? 0) > 0 && (
+                <CardFooter className="border-t pt-4">
+                  <p className="text-xs text-muted-foreground">
+                    <AlertTriangle className="h-3 w-3 inline mr-1 text-yellow-600" />
+                    {stats?.lowStockCount ?? 0} products under 7 days of stock
+                  </p>
+                </CardFooter>
+              )}
+            </Card>
+
+            {/* Top Selling */}
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Top Selling</CardTitle>
+                  <CardDescription>By revenue — last 30 days</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {statsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : (stats?.topProducts ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No sales in the last 30 days</p>
+                ) : (
+                  (() => {
+                    const top = stats!.topProducts
+                    const maxRevenue = top[0]?.revenue ?? 1
+                    return (
+                      <div className="space-y-3">
+                        {top.map((p, i) => (
+                          <div key={p.id} className="flex items-center gap-3">
+                            <span className="text-sm font-bold text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                            {p.image && (
+                              <img src={p.image} alt={p.name} className="w-8 h-8 rounded object-cover shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-sm font-medium truncate pr-3">{p.name}</p>
+                                <p className="text-sm font-semibold shrink-0">${p.revenue.toFixed(2)}</p>
+                              </div>
+                              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-green-500 rounded-full" style={{ width: `${(p.revenue / maxRevenue) * 100}%` }} />
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{p.unitsSold} units sold</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Alerts Tab */}
@@ -718,162 +665,110 @@ export function Dashboard() {
               <CardDescription>Issues that need your attention</CardDescription>
             </CardHeader>
             <CardContent>
+              {statsLoading ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : (
               <div className="space-y-4">
-                {dashboardData.alerts.critical > 0 && (
+                {(stats?.alertCounts.critical ?? 0) > 0 && (
                   <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
                     <div className="flex items-center gap-2 text-red-700">
                       <AlertTriangle className="h-5 w-5" />
                       <h3 className="font-medium">
-                        Critical Alerts ({dashboardData.alerts.critical})
+                        Critical Alerts ({stats!.alertCounts.critical})
                       </h3>
                     </div>
                     <p className="text-sm text-red-600 mt-1">
-                      {dashboardData.alerts.critical} products are at critical
-                      inventory levels and need immediate attention.
+                      {stats!.alertCounts.critical} products are at critical inventory levels and need immediate attention.
                     </p>
-                    <Button
-                      size="sm"
-                      className="mt-2 bg-red-600 hover:bg-red-700"
-                    >
-                      View Critical Items
-                    </Button>
+                    <Link href="/web/products">
+                      <Button size="sm" className="mt-2 bg-red-600 hover:bg-red-700">View Critical Items</Button>
+                    </Link>
                   </div>
                 )}
 
-                {dashboardData.alerts.warning > 0 && (
+                {(stats?.alertCounts.warning ?? 0) > 0 && (
                   <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
                     <div className="flex items-center gap-2 text-yellow-700">
                       <AlertTriangle className="h-5 w-5" />
-                      <h3 className="font-medium">
-                        Warnings ({dashboardData.alerts.warning})
-                      </h3>
+                      <h3 className="font-medium">Warnings ({stats!.alertCounts.warning})</h3>
                     </div>
                     <p className="text-sm text-yellow-600 mt-1">
-                      {dashboardData.alerts.warning} products are running low
-                      and should be reordered soon.
+                      {stats!.alertCounts.warning} products are running low and should be reordered soon.
                     </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2 border-yellow-600 text-yellow-700 hover:bg-yellow-100"
-                    >
-                      View Low Stock Items
-                    </Button>
+                    <Link href="/web/products">
+                      <Button size="sm" variant="outline" className="mt-2 border-yellow-600 text-yellow-700 hover:bg-yellow-100">View Low Stock Items</Button>
+                    </Link>
                   </div>
                 )}
 
-                {dashboardData.alerts.maintenance > 0 && (
+                {(stats?.alertCounts.maintenance ?? 0) > 0 && (
                   <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg">
                     <div className="flex items-center gap-2 text-blue-700">
                       <Settings className="h-5 w-5" />
-                      <h3 className="font-medium">
-                        Maintenance ({dashboardData.alerts.maintenance})
-                      </h3>
+                      <h3 className="font-medium">Maintenance ({stats!.alertCounts.maintenance})</h3>
                     </div>
                     <p className="text-sm text-blue-600 mt-1">
-                      {dashboardData.alerts.maintenance} machines require
-                      maintenance or service.
+                      {stats!.alertCounts.maintenance} machines require maintenance or service.
                     </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2 border-blue-600 text-blue-700 hover:bg-blue-100"
-                    >
-                      View Maintenance Schedule
-                    </Button>
+                    <Link href="/web/machines">
+                      <Button size="sm" variant="outline" className="mt-2 border-blue-600 text-blue-700 hover:bg-blue-100">View Machines</Button>
+                    </Link>
                   </div>
                 )}
 
-                {dashboardData.alerts.critical === 0 &&
-                  dashboardData.alerts.warning === 0 &&
-                  dashboardData.alerts.maintenance === 0 && (
+                {(stats?.unattributedRevenue ?? 0) > 0 && (
+                  <div className="p-4 border border-orange-200 bg-orange-50 rounded-lg">
+                    <div className="flex items-center gap-2 text-orange-700">
+                      <DollarSign className="h-5 w-5" />
+                      <h3 className="font-medium">
+                        Unattributed Revenue — ${(stats!.unattributedRevenue).toFixed(2)}
+                      </h3>
+                    </div>
+                    <p className="text-sm text-orange-600 mt-1">
+                      {stats!.unattributedCount} transaction{stats!.unattributedCount !== 1 ? "s" : ""} ({((stats!.unattributedRevenue / (totalSales || 1)) * 100).toFixed(0)}% of revenue) can't be linked to a machine because the card reader ID isn't registered in VendorPro.
+                    </p>
+                    {stats!.unknownCardReaderIds.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-orange-700 mb-1">Unknown card reader IDs — add these to a machine to fix:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {stats!.unknownCardReaderIds.map((id) => (
+                            <code key={id} className="text-xs bg-orange-100 border border-orange-300 rounded px-1.5 py-0.5 font-mono text-orange-800">{id}</code>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <Link href="/web/machines">
+                      <Button size="sm" variant="outline" className="mt-3 border-orange-600 text-orange-700 hover:bg-orange-100">
+                        Set Up Card Readers
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+
+                {(stats?.alertCounts.critical ?? 0) === 0 &&
+                  (stats?.alertCounts.warning ?? 0) === 0 &&
+                  (stats?.alertCounts.maintenance ?? 0) === 0 &&
+                  (stats?.unattributedRevenue ?? 0) === 0 && (
                     <div className="p-4 border border-green-200 bg-green-50 rounded-lg">
                       <div className="flex items-center gap-2 text-green-700">
                         <div className="h-5 w-5 rounded-full bg-green-600 flex items-center justify-center">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="text-white"
-                          >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-white">
                             <polyline points="20 6 9 17 4 12"></polyline>
                           </svg>
                         </div>
                         <h3 className="font-medium">All Systems Operational</h3>
                       </div>
                       <p className="text-sm text-green-600 mt-1">
-                        There are no alerts or warnings that need your attention
-                        at this time.
+                        There are no alerts or warnings that need your attention at this time.
                       </p>
                     </div>
                   )}
               </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Link href="/machines">
-              <Button
-                variant="outline"
-                className="w-full h-auto py-4 flex flex-col items-center justify-center gap-2"
-              >
-                <Truck className="h-6 w-6" />
-                <span>Manage Machines</span>
-              </Button>
-            </Link>
-            <Link href="/products">
-              <Button
-                variant="outline"
-                className="w-full h-auto py-4 flex flex-col items-center justify-center gap-2"
-              >
-                <Package className="h-6 w-6" />
-                <span>Inventory</span>
-              </Button>
-            </Link>
-            <Link href="/orders">
-              <Button
-                variant="outline"
-                className="w-full h-auto py-4 flex flex-col items-center justify-center gap-2"
-              >
-                <ShoppingCart className="h-6 w-6" />
-                <span>Orders</span>
-              </Button>
-            </Link>
-            <Link href="/reports">
-              <Button
-                variant="outline"
-                className="w-full h-auto py-4 flex flex-col items-center justify-center gap-2"
-              >
-                <BarChart3 className="h-6 w-6" />
-                <span>Reports</span>
-              </Button>
-            </Link>
-            <Link href="/settings">
-              <Button
-                variant="outline"
-                className="w-full h-auto py-4 flex flex-col items-center justify-center gap-2"
-              >
-                <Settings className="h-6 w-6" />
-                <span>Settings</span>
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

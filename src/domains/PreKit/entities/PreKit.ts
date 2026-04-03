@@ -39,8 +39,17 @@ export class PreKit {
   public get machineId() {
     return this.props.machineId
   }
+  public get routeStopId() {
+    return this.props.routeStopId
+  }
+  public get scheduledDate() {
+    return this.props.scheduledDate
+  }
   public get status() {
     return this.props.status
+  }
+  public get lastRecalculatedAt() {
+    return this.props.lastRecalculatedAt
   }
   public get createdAt() {
     return this.props.createdAt

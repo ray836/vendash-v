@@ -2,12 +2,10 @@ import MachineDetails from "./machine-details"
 
 export default async function MachinePage({
   params,
-  searchParams,
 }: {
-  params: { id: string }
-  searchParams: { [key: string]: string | string[] | undefined }
+  params: Promise<{ id: string }>
 }) {
-  const { id } = params
+  const { id } = await params
 
   return (
     <>

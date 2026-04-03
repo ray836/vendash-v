@@ -8,7 +8,10 @@ export enum PreKitStatus {
 const basePreKit = z.object({
   id: z.string(),
   machineId: z.string(),
+  routeStopId: z.string().optional(),
+  scheduledDate: z.date().optional(),
   status: z.nativeEnum(PreKitStatus),
+  lastRecalculatedAt: z.date().optional().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
   createdBy: z.string(),
@@ -41,6 +44,7 @@ const publicPreKitItem = basePreKitItem
     currentQuantity: z.number(),
     capacity: z.number(),
     slotCode: z.string(),
+    inStock: z.number().optional(),
   })
 
 const publicPreKitWithItems = basePreKit
@@ -51,6 +55,10 @@ const publicPreKitWithItems = basePreKit
   })
   .extend({
     items: z.array(publicPreKitItem),
+    routeId: z.string().optional().nullable(),
+    routeName: z.string().optional().nullable(),
+    routeStopId: z.string().optional().nullable(),
+    locationName: z.string().optional().nullable(),
   })
 
 export const PreKitSchemas = {

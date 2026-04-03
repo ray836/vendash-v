@@ -20,6 +20,15 @@ export class Product {
   public get vendorLink() {
     return this.props.vendorLink
   }
+  public get vendorSku() {
+    return this.props.vendorSku
+  }
+  public get barcode() {
+    return this.props.barcode
+  }
+  public get urlIdentifier() {
+    return this.props.urlIdentifier
+  }
   public get caseCost() {
     return this.props.caseCost
   }
@@ -31,6 +40,12 @@ export class Product {
   }
   public get shippingTimeInDays() {
     return this.props.shippingTimeInDays
+  }
+  public get reorderPoint() {
+    return this.props.reorderPoint
+  }
+  public get aliases() {
+    return this.props.aliases ?? []
   }
   public get organizationId() {
     return this.props.organizationId

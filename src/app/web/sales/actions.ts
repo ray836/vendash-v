@@ -1,15 +1,17 @@
 "use server"
-import { GetOrgTransactionsUseCase } from "@/domains/Transaction/use-cases/GetOrgTransactionsUseCase"
-import { DrizzleTransactionRepository } from "@/infrastructure/repositories/DrizzleTransactionRepository"
-import { db } from "@/infrastructure/database"
-import { PublicTransactionWithItemsAndProductDTO } from "@/domains/Transaction/schemas/TransactionSchemas"
 
-export async function getOrgTransactions(): Promise<
-  PublicTransactionWithItemsAndProductDTO[]
-> {
-  const organizationId = "1"
-  const transactions = await new GetOrgTransactionsUseCase(
-    new DrizzleTransactionRepository(db)
-  ).execute(organizationId)
-  return transactions
+import { db } from "@/infrastructure/database"
+import { TransactionRepository } from "@/infrastructure/repositories/TransactionRepository"
+import * as TransactionService from "@/domains/Transaction/TransactionService"
+import { PublicTransactionWithItemsAndProductDTO } from "@/domains/Transaction/schemas/TransactionSchemas"
+import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
+import { auth } from "@/lib/auth"
+
+export async function getOrgTransactions(): Promise<PublicTransactionWithItemsAndProductDTO[]> {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
+  const repo = new TransactionRepository(db)
+  return TransactionService.getOrgTransactions(repo, organizationId)
 }

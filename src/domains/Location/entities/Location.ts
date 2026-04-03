@@ -4,6 +4,8 @@ export const LocationSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   address: z.string().min(1),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
   organizationId: z.string().uuid(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -17,6 +19,8 @@ export class Location {
   readonly id: string
   readonly name: string
   readonly address: string
+  readonly latitude?: number
+  readonly longitude?: number
   readonly organizationId: string
   readonly createdAt: Date
   readonly updatedAt: Date
@@ -27,6 +31,8 @@ export class Location {
     this.id = props.id
     this.name = props.name
     this.address = props.address
+    this.latitude = props.latitude
+    this.longitude = props.longitude
     this.organizationId = props.organizationId
     this.createdAt = props.createdAt
     this.updatedAt = props.updatedAt

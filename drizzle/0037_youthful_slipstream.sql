@@ -1,0 +1,1 @@
+ALTER TABLE "pre_kits" ALTER COLUMN "status" SET DEFAULT 'OPEN';

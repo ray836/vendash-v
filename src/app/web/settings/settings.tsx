@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 
-import { useState } from "react"
+import { useState, useEffect, useTransition } from "react"
 import {
   User,
   Bell,
@@ -13,7 +13,9 @@ import {
   Globe,
   Save,
   Trash2,
+  Building2,
 } from "lucide-react"
+import { getOrganization, updateOrganization } from "./actions"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -94,6 +96,34 @@ export function Settings() {
     setInventorySettings((prev) => ({ ...prev, [field]: value }))
   }
 
+  const [orgForm, setOrgForm] = useState({ name: '', address: '' })
+  const [orgLoaded, setOrgLoaded] = useState(false)
+  const [orgError, setOrgError] = useState<string | null>(null)
+  const [orgSuccess, setOrgSuccess] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    getOrganization().then((org) => {
+      if (org) setOrgForm({ name: org.name, address: org.address ?? '' })
+      setOrgLoaded(true)
+    })
+  }, [])
+
+  function handleOrgSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setOrgError(null)
+    setOrgSuccess(false)
+    const fd = new FormData(e.currentTarget)
+    startTransition(async () => {
+      try {
+        await updateOrganization(fd)
+        setOrgSuccess(true)
+      } catch (err) {
+        setOrgError(err instanceof Error ? err.message : 'Failed to save')
+      }
+    })
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -104,7 +134,7 @@ export function Settings() {
       </div>
 
       <Tabs defaultValue="account" className="space-y-4">
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 w-full">
+        <TabsList className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 w-full">
           <TabsTrigger value="account" className="flex items-center gap-2">
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Account</span>
@@ -127,6 +157,10 @@ export function Settings() {
           <TabsTrigger value="security" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
             <span className="hidden sm:inline">Security</span>
+          </TabsTrigger>
+          <TabsTrigger value="organization" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Organization</span>
           </TabsTrigger>
         </TabsList>
 
@@ -843,6 +877,64 @@ export function Settings() {
                 </div>
               </div>
             </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Organization Settings */}
+        <TabsContent value="organization">
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization Details</CardTitle>
+              <CardDescription>
+                Update your organization&apos;s name and address.
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={handleOrgSubmit}>
+              <CardContent className="space-y-4">
+                {!orgLoaded ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="org-name">Company Name</Label>
+                      <Input
+                        id="org-name"
+                        name="name"
+                        required
+                        value={orgForm.name}
+                        onChange={(e) =>
+                          setOrgForm((prev) => ({ ...prev, name: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="org-address">Business Address</Label>
+                      <Input
+                        id="org-address"
+                        name="address"
+                        placeholder="123 Main St, City, State"
+                        value={orgForm.address}
+                        onChange={(e) =>
+                          setOrgForm((prev) => ({ ...prev, address: e.target.value }))
+                        }
+                      />
+                    </div>
+                    {orgError && (
+                      <p className="text-sm text-destructive">{orgError}</p>
+                    )}
+                    {orgSuccess && (
+                      <p className="text-sm text-green-600">Changes saved.</p>
+                    )}
+                  </>
+                )}
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" className="ml-auto" disabled={isPending || !orgLoaded}>
+                  <Save className="mr-2 h-4 w-4" />
+                  {isPending ? 'Saving…' : 'Save Changes'}
+                </Button>
+              </CardFooter>
+            </form>
           </Card>
         </TabsContent>
       </Tabs>

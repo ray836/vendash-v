@@ -15,6 +15,7 @@ const base = z.object({
   caseSize: z.number(),
   shippingAvailable: z.boolean(),
   shippingTimeInDays: z.number(),
+  aliases: z.string().array().optional().default([]),
   organizationId: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -31,6 +32,7 @@ const publicProduct = base.pick({
   caseSize: true,
   shippingAvailable: true,
   shippingTimeInDays: true,
+  aliases: true,
   organizationId: true,
 })
 

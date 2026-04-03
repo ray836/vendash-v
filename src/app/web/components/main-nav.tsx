@@ -12,53 +12,74 @@ import {
   ShoppingCart,
   DollarSign,
   ClipboardList,
+  MapPin,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { useRole } from "@/lib/role-context"
+import { UserRole } from "@/domains/User/entities/User"
+
+const ALL_ROLES = [UserRole.ADMIN, UserRole.OPERATOR, UserRole.DRIVER]
+const ADMIN_OPERATOR = [UserRole.ADMIN, UserRole.OPERATOR]
 
 const navItems = [
   {
     title: "Dashboard",
     href: "/web/dashboard",
     icon: BarChart3,
+    roles: ADMIN_OPERATOR,
   },
   {
     title: "Machines",
     href: "/web/machines",
     icon: Truck,
+    roles: ALL_ROLES,
+  },
+  {
+    title: "Routes",
+    href: "/web/routes",
+    icon: MapPin,
+    roles: ALL_ROLES,
   },
   {
     title: "Products",
     href: "/web/products",
     icon: Package,
+    roles: ALL_ROLES,
   },
   {
     title: "Orders",
     href: "/web/orders",
     icon: ShoppingCart,
+    roles: ADMIN_OPERATOR,
   },
   {
     title: "Sales",
     href: "/web/sales",
     icon: DollarSign,
+    roles: ADMIN_OPERATOR,
   },
   {
     title: "Pre-kits",
     href: "/web/prekits",
     icon: ClipboardList,
+    roles: ALL_ROLES,
   },
   {
     title: "Settings",
     href: "/web/settings",
     icon: Settings,
+    roles: ADMIN_OPERATOR,
   },
 ]
 
 export function MainNav() {
   const pathname = usePathname()
   const [open, setOpen] = React.useState(false)
+  const { role } = useRole()
+  const visibleItems = navItems.filter((item) => item.roles.includes(role))
 
   return (
     <div className="mr-4 md:flex">
@@ -81,7 +102,7 @@ export function MainNav() {
             </Link>
           </div>
           <nav className="flex flex-col gap-4 mt-8">
-            {navItems.map((item) => (
+            {visibleItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -104,7 +125,7 @@ export function MainNav() {
 
       {/* Desktop Navigation */}
       <nav className="hidden md:flex items-center gap-6">
-        {navItems.map((item) => (
+        {visibleItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}

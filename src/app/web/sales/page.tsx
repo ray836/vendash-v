@@ -38,6 +38,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import { SalesTableSkeleton } from "./sales-table-skeleton"
 import { SalesStats } from "./sales-stats"
 import { getOrgTransactions } from "./actions"
@@ -79,7 +88,11 @@ function sortTransactionsByDate(
   })
 }
 
-export default function SalesPage() {
+import { useRole } from "@/lib/role-context"
+import { AccessGuard } from "@/components/access-guard"
+import { UserRole } from "@/domains/User/entities/User"
+
+function SalesPageContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [date, setDate] = useState<Date | undefined>(undefined)
   const [filteredSales, setFilteredSales] = useState<
@@ -90,6 +103,8 @@ export default function SalesPage() {
   const [allSales, setAllSales] = useState<
     PublicTransactionWithItemsAndProductDTO[]
   >([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   // Fetch data effect
   useEffect(() => {
@@ -146,6 +161,7 @@ export default function SalesPage() {
       }
 
       setFilteredSales(filtered)
+      setCurrentPage(1) // Reset to first page when filters change
     }, 500)
 
     return () => clearTimeout(timer)
@@ -167,6 +183,38 @@ export default function SalesPage() {
   const uniqueMachines = new Set(filteredSales.map((sale) => sale.cardReaderId))
     .size
 
+  // Month-over-month calculations from all (unfiltered) sales
+  const now = new Date()
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
+
+  const thisMonthSales = allSales.filter((s) => new Date(s.createdAt) >= thisMonthStart)
+  const lastMonthSales = allSales.filter((s) => {
+    const d = new Date(s.createdAt)
+    return d >= lastMonthStart && d <= lastMonthEnd
+  })
+
+  const thisMonthCount = thisMonthSales.length
+  const lastMonthCount = lastMonthSales.length
+  const salesChangePct = lastMonthCount === 0 ? null
+    : Math.round(((thisMonthCount - lastMonthCount) / lastMonthCount) * 100)
+
+  const thisMonthRevenue = thisMonthSales.reduce((s, t) => s + t.total, 0)
+  const lastMonthRevenue = lastMonthSales.reduce((s, t) => s + t.total, 0)
+  const revenueChangePct = lastMonthRevenue === 0 ? null
+    : Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
+
+  const thisMonthMachines = new Set(thisMonthSales.map((s) => s.cardReaderId)).size
+  const lastMonthMachines = new Set(lastMonthSales.map((s) => s.cardReaderId)).size
+  const machinesChange = thisMonthMachines - lastMonthMachines
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredSales.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedSales = filteredSales.slice(startIndex, endIndex)
+
   return (
     <div className="container mx-auto py-6 space-y-8">
       <div className="flex flex-col gap-2">
@@ -180,6 +228,9 @@ export default function SalesPage() {
         totalSales={totalSales}
         totalRevenue={totalRevenue}
         uniqueMachines={uniqueMachines}
+        salesChangePct={salesChangePct}
+        revenueChangePct={revenueChangePct}
+        machinesChange={machinesChange}
         isLoading={isLoading}
       />
 
@@ -249,7 +300,7 @@ export default function SalesPage() {
             <SalesTableSkeleton />
           ) : (
             <div className="border rounded-md">
-              {filteredSales.length > 0 ? (
+              {paginatedSales.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -263,7 +314,7 @@ export default function SalesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredSales.map((sale) => (
+                    {paginatedSales.map((sale) => (
                       <TableRow key={sale.id}>
                         <TableCell className="font-medium">{sale.id}</TableCell>
                         <TableCell>
@@ -326,7 +377,13 @@ export default function SalesPage() {
                           </div>
                         </TableCell>
                         <TableCell>${sale.total.toFixed(2)}</TableCell>
-                        <TableCell>{sale.transactionType}</TableCell>
+                        <TableCell>
+                          {sale.last4CardDigits ? (
+                            <span>Card ···· {sale.last4CardDigits}</span>
+                          ) : (
+                            <span>Cash</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Badge
                             variant={
@@ -364,20 +421,87 @@ export default function SalesPage() {
 
           <div className="flex items-center justify-between mt-4">
             <div className="text-sm text-muted-foreground">
-              Showing <strong>1-{filteredSales.length}</strong> of{" "}
-              <strong>{filteredSales.length}</strong> transactions
+              {filteredSales.length > 0 ? (
+                <>
+                  Showing <strong>{startIndex + 1}-{Math.min(endIndex, filteredSales.length)}</strong> of{" "}
+                  <strong>{filteredSales.length}</strong> transactions
+                </>
+              ) : (
+                "No transactions found"
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled>
-                Previous
-              </Button>
-              <Button variant="outline" size="sm" disabled>
-                Next
-              </Button>
-            </div>
+
+            {totalPages > 1 && (
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let pageNum
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(pageNum)}
+                          isActive={currentPage === pageNum}
+                          className="cursor-pointer"
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  })}
+
+                  {totalPages > 5 && currentPage < totalPages - 2 && (
+                    <>
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                      <PaginationItem>
+                        <PaginationLink
+                          onClick={() => setCurrentPage(totalPages)}
+                          className="cursor-pointer"
+                        >
+                          {totalPages}
+                        </PaginationLink>
+                      </PaginationItem>
+                    </>
+                  )}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            )}
           </div>
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function SalesPage() {
+  return (
+    <AccessGuard allowedRoles={[UserRole.ADMIN, UserRole.OPERATOR]}>
+      <SalesPageContent />
+    </AccessGuard>
   )
 }

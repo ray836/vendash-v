@@ -31,7 +31,7 @@ export default function UsersPage() {
     firstName: "",
     lastName: "",
     email: "",
-    role: UserRole.USER,
+    role: UserRole.OPERATOR,
   })
 
   useEffect(() => {
@@ -53,7 +53,7 @@ export default function UsersPage() {
     const user = (await createUser(newUser)) as unknown as PublicUserDTO
     console.log("user", user)
     setUsers([...users, user])
-    setNewUser({ firstName: "", lastName: "", email: "", role: UserRole.USER })
+    setNewUser({ firstName: "", lastName: "", email: "", role: UserRole.OPERATOR })
   }
 
   const handleDelete = async (userId: string) => {
@@ -136,7 +136,7 @@ export default function UsersPage() {
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={UserRole.USER}>User</SelectItem>
+                      <SelectItem value={UserRole.OPERATOR}>User</SelectItem>
                       <SelectItem value={UserRole.ADMIN}>Admin</SelectItem>
                     </SelectContent>
                   </Select>

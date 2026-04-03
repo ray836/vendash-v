@@ -9,12 +9,12 @@ const base = z.object({
   machineId: z.string().uuid({
     message: "machineId is required",
   }),
-  productId: z.string().uuid({
-    message: "productId is required",
-  }),
+  productId: z.string().uuid().nullable().optional(),
   labelCode: z.string().min(1, {
     message: "labelCode is required",
   }),
+  rowKey: z.string().nullable().optional(),
+  colIndex: z.number().int().nullable().optional(),
   ccReaderCode: z.string().optional(),
   cardReaderId: z.string().optional(),
   price: z.number().min(0, {
@@ -35,6 +35,8 @@ const publicSlot = base.pick({
   machineId: true,
   productId: true,
   labelCode: true,
+  rowKey: true,
+  colIndex: true,
   ccReaderCode: true,
   cardReaderId: true,
   price: true,

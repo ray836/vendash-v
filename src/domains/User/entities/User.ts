@@ -2,7 +2,8 @@ import { BaseUserDTO } from "../schemas/UserSchemas"
 
 export enum UserRole {
   ADMIN = "admin",
-  USER = "user",
+  OPERATOR = "operator",
+  DRIVER = "driver",
 }
 
 export class User {

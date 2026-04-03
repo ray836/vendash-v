@@ -7,13 +7,30 @@ interface SalesStatsProps {
   totalSales: number
   totalRevenue: number
   uniqueMachines: number
+  salesChangePct?: number | null
+  revenueChangePct?: number | null
+  machinesChange?: number
   isLoading?: boolean
+}
+
+function ChangeLabel({ pct }: { pct: number | null | undefined }) {
+  if (pct == null) return <p className="text-xs text-muted-foreground">No data last month</p>
+  const sign = pct >= 0 ? "+" : ""
+  const color = pct >= 0 ? "text-green-600" : "text-red-500"
+  return (
+    <p className={`text-xs ${color}`}>
+      {sign}{pct}% from last month
+    </p>
+  )
 }
 
 export function SalesStats({
   totalSales,
   totalRevenue,
   uniqueMachines,
+  salesChangePct,
+  revenueChangePct,
+  machinesChange,
   isLoading = false,
 }: SalesStatsProps) {
   return (
@@ -32,9 +49,7 @@ export function SalesStats({
           ) : (
             <>
               <div className="text-2xl font-bold">{totalSales}</div>
-              <p className="text-xs text-muted-foreground">
-                +{Math.floor(Math.random() * 20) + 5}% from last month
-              </p>
+              <ChangeLabel pct={salesChangePct} />
             </>
           )}
         </CardContent>
@@ -52,12 +67,8 @@ export function SalesStats({
             </>
           ) : (
             <>
-              <div className="text-2xl font-bold">
-                ${totalRevenue.toFixed(2)}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                +{Math.floor(Math.random() * 15) + 2}% from last month
-              </p>
+              <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
+              <ChangeLabel pct={revenueChangePct} />
             </>
           )}
         </CardContent>
@@ -76,9 +87,11 @@ export function SalesStats({
           ) : (
             <>
               <div className="text-2xl font-bold">{uniqueMachines}</div>
-              <p className="text-xs text-muted-foreground">
-                +{Math.floor(Math.random() * 5) + 1} new this month
-              </p>
+              {machinesChange != null && (
+                <p className={`text-xs ${machinesChange >= 0 ? "text-green-600" : "text-red-500"}`}>
+                  {machinesChange >= 0 ? "+" : ""}{machinesChange} vs last month
+                </p>
+              )}
             </>
           )}
         </CardContent>

@@ -1,42 +1,60 @@
 "use server"
 
-import { CreateLocationUseCase } from "@/domains/Location/use-cases/CreateLocationUseCase"
-import { DeleteLocationUseCase } from "@/domains/Location/use-cases/DeleteLocationUseCase"
-import { GetLocationsUseCase } from "@/domains/Location/use-cases/GetLocationsUseCase"
+import * as LocationService from "@/domains/Location/LocationService"
 import { db } from "@/infrastructure/database"
-import { DrizzleLocationRepository } from "@/infrastructure/repositories/DrizzleLocationRepository"
-
-const organizationId = "1"
+import { LocationRepository } from "@/infrastructure/repositories/LocationRepository"
+import { auth } from "@/lib/auth"
 
 export async function getLocations(): Promise<string> {
-  const drizzleLocationRepository = new DrizzleLocationRepository(db)
-  const getLocationsUseCase = new GetLocationsUseCase(drizzleLocationRepository)
-  const locations = await getLocationsUseCase.execute(organizationId)
-  console.log(locations)
-  console.log("iiiiikkkkkii")
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
+  const repo = new LocationRepository(db)
+  const locations = await LocationService.getLocations(repo, organizationId)
   return JSON.stringify(locations)
 }
 
 export async function createLocation(location: {
   name: string
   address: string
+  latitude?: number
+  longitude?: number
 }): Promise<string> {
-  const drizzleLocationRepository = new DrizzleLocationRepository(db)
-  const createLocationUseCase = new CreateLocationUseCase(
-    drizzleLocationRepository
-  )
-  const result = await createLocationUseCase.execute({
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
+  const repo = new LocationRepository(db)
+  const result = await LocationService.createLocation(repo, {
     name: location.name,
     address: location.address,
-    organizationId: organizationId,
+    organizationId,
+    latitude: location.latitude,
+    longitude: location.longitude,
+  })
+  return JSON.stringify(result)
+}
+
+export async function updateLocation(
+  id: string,
+  data: { name?: string; address?: string; latitude?: number | null; longitude?: number | null }
+): Promise<string> {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
+  const repo = new LocationRepository(db)
+  const result = await LocationService.updateLocation(repo, id, {
+    ...data,
+    organizationId,
+    latitude: data.latitude ?? undefined,
+    longitude: data.longitude ?? undefined,
   })
   return JSON.stringify(result)
 }
 
 export async function deleteLocation(id: string): Promise<void> {
-  const drizzleLocationRepository = new DrizzleLocationRepository(db)
-  const deleteLocationUseCase = new DeleteLocationUseCase(
-    drizzleLocationRepository
-  )
-  await deleteLocationUseCase.execute(id)
+  const repo = new LocationRepository(db)
+  await LocationService.deleteLocation(repo, id)
 }

@@ -7,23 +7,22 @@ import {
 import { Suspense } from "react"
 
 interface MachineSetupPageProps {
-  params: {
-    id: string
-  }
+  params: Promise<{ id: string }>
 }
 
 export default async function MachineSetupPage({
   params,
 }: MachineSetupPageProps) {
+  const { id } = await params
   const orgProducts = await getOrgProducts()
-  const machineData = await getMachineWithSlots(params.id)
+  const machineData = await getMachineWithSlots(id)
   const locations = await getLocationsServer()
 
   return (
     <main className="container mx-auto py-6">
       <Suspense fallback={<div>Loading...</div>}>
         <VendingMachineSetup
-          machineId={params.id}
+          machineId={id}
           products={orgProducts}
           initialSlots={machineData.slots}
           machineType={machineData.type}

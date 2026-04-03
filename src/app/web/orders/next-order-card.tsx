@@ -13,12 +13,13 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { OrderItem } from "./order-item"
+import { AddProductDialog } from "./add-product-dialog"
 import { useState, useEffect } from "react"
 import {
   getCurrentOrder,
-  testAddItemToOrder,
   updateOrderItemQuantity,
   placeCurrentOrder,
+  removeOrderItem,
 } from "./actions"
 import { toast } from "@/hooks/use-toast"
 import {
@@ -29,39 +30,13 @@ import {
 
 interface NextOrderCardProps {
   nextOrderDate?: Date
-  orderItems?: {
-    id: string
-    orderId: string
-    quantity: number
-    unitPrice: number
-    product: {
-      id: string
-      name: string
-      recommendedPrice: number
-      category: string
-      image: string
-      vendorLink: string
-      caseCost: number
-      caseSize: number
-      shippingAvailable: boolean
-      shippingTimeInDays: number
-      organizationId: string
-      createdAt: Date
-      updatedAt: Date
-    }
-  }[]
+  onOrderPlaced?: () => void
 }
 
-export function NextOrderCard({
-  nextOrderDate,
-  orderItems,
-}: NextOrderCardProps) {
+export function NextOrderCard({ nextOrderDate, onOrderPlaced }: NextOrderCardProps) {
   const [items, setItems] = useState<PublicOrderItemResponseDTO[]>([])
   const [order, setOrder] = useState<PublicOrderDTO | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isAddingTestItem, setIsAddingTestItem] = useState(false)
-  const [isReviewMode, setIsReviewMode] = useState(false)
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
 
   const fetchCurrentOrder = async () => {
     try {
@@ -70,9 +45,10 @@ export function NextOrderCard({
       if (result.success && result.order) {
         setOrder(result.order)
         setItems(result.order.orderItems)
-      } else if (orderItems) {
-        // If no order exists but we have orderItems prop, use those
-        setItems(orderItems as PublicOrderItemResponseDTO[])
+      } else {
+        // No current order found (e.g., after placing an order)
+        setOrder(null)
+        setItems([])
       }
     } catch (err: unknown) {
       console.error("Failed to fetch current order:", err)
@@ -92,7 +68,18 @@ export function NextOrderCard({
 
   const handleQuantityChange = async (id: string, newQuantity: number) => {
     try {
-      const result = await updateOrderItemQuantity(id, newQuantity)
+      // Find the item to get its orderId
+      const item = items.find(item => item.id === id)
+      if (!item) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Item not found",
+        })
+        return
+      }
+
+      const result = await updateOrderItemQuantity(id, item.orderId, newQuantity)
 
       if (result.success) {
         // just update the quantity of the item in the items array
@@ -118,8 +105,32 @@ export function NextOrderCard({
     }
   }
 
-  const handleRemoveItem = (id: string) => {
-    setItems(items.filter((item) => item.id !== id))
+  const handleRemoveItem = async (id: string) => {
+    try {
+      const result = await removeOrderItem(id)
+
+      if (result.success) {
+        // Remove from local state after successful backend deletion
+        setItems(items.filter((item) => item.id !== id))
+        toast({
+          title: "Success",
+          description: "Item removed from order",
+        })
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: result.error || "Failed to remove item",
+        })
+      }
+    } catch (err: unknown) {
+      console.error("Failed to remove item:", err)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to remove item",
+      })
+    }
   }
 
   const totalNextOrder = items.reduce(
@@ -127,70 +138,16 @@ export function NextOrderCard({
     0
   )
 
-  const handleTestAddItem = async () => {
-    try {
-      setIsAddingTestItem(true)
-      const result = await testAddItemToOrder()
-
-      if (result.success) {
-        toast({
-          title: "Success",
-          description: "Test item added successfully",
-        })
-        // Refresh the order data after adding an item
-        await fetchCurrentOrder()
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.error || "Failed to add test item",
-        })
-      }
-    } catch (err: unknown) {
-      console.error("Failed to add test item:", err)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to add test item",
-      })
-    } finally {
-      setIsAddingTestItem(false)
-    }
-  }
-
-  const handleReviewClick = () => {
-    setIsReviewMode(true)
-  }
-
-  const handleCancelReview = () => {
-    setIsReviewMode(false)
-    setSelectedItems(new Set())
-  }
-
-  const handleItemSelect = (itemId: string) => {
-    setSelectedItems((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId)
-      } else {
-        newSet.add(itemId)
-      }
-      return newSet
-    })
-  }
-
-  const handleCompleteOrder = async () => {
+  const handlePlaceOrder = async () => {
     if (!order) return
 
-    const selectedOrderItems = items
-      .filter((item) => selectedItems.has(item.id))
-      .map((item) => ({
-        id: item.id,
-        orderId: item.orderId,
-        productId: item.product.id,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-      }))
+    const orderItems = items.map((item) => ({
+      id: item.id,
+      orderId: item.orderId,
+      productId: item.product.id,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    }))
 
     const request: PlaceCurrentOrderRequestDTO = {
       id: order.id,
@@ -202,7 +159,7 @@ export function NextOrderCard({
       shippingCost: order.shippingCost,
       totalAmount: totalNextOrder,
       placedBy: "1",
-      orderItems: selectedOrderItems,
+      orderItems: orderItems,
     }
 
     try {
@@ -214,9 +171,7 @@ export function NextOrderCard({
         })
         // Refresh the order data after successful placement
         await fetchCurrentOrder()
-        // Reset review mode and selected items
-        setIsReviewMode(false)
-        setSelectedItems(new Set())
+        onOrderPlaced?.()
       } else {
         toast({
           variant: "destructive",
@@ -259,88 +214,62 @@ export function NextOrderCard({
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleTestAddItem}
-              disabled={isAddingTestItem}
-            >
-              {isAddingTestItem ? "Adding..." : "Test Add Item"}
-            </Button>
+            <AddProductDialog onSuccess={fetchCurrentOrder} />
             <Button variant="outline">Modify Schedule</Button>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="rounded-lg border">
-            <div className="p-4 flex items-center justify-between font-medium">
-              <h3>Items in your next order ({items.length})</h3>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/shop">Add Items</Link>
-              </Button>
+          {items.length === 0 ? (
+            <div className="rounded-lg border p-12 text-center">
+              <p className="text-lg text-muted-foreground">Your cart is empty</p>
             </div>
-            <Separator />
-            <div className="px-4 py-2 border-b bg-muted/50">
-              <div className="grid grid-cols-[64px_1fr] gap-4">
-                <div />
-                <div
-                  className={`grid ${
-                    isReviewMode
-                      ? "grid-cols-[2fr_1.5fr_1fr_1fr_1fr_1.5fr_0.5fr]"
-                      : "grid-cols-6"
-                  } gap-4 text-sm font-medium text-muted-foreground`}
-                >
-                  <div className="col-span-1">Product</div>
-                  <div className="col-span-1">Case Details</div>
-                  <div className="col-span-1 text-center">Total Items</div>
-                  <div className="col-span-1 text-center">Total Cost</div>
-                  <div className="col-span-1">Quantity</div>
-                  <div className="col-span-1 text-right">Actions</div>
-                  {isReviewMode && (
-                    <div className="col-span-1 text-center">Review</div>
-                  )}
+          ) : (
+            <div className="rounded-lg border">
+              <div className="p-4 flex items-center justify-between font-medium">
+                <h3>Items in your next order ({items.length})</h3>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/shop">Add Items</Link>
+                </Button>
+              </div>
+              <Separator />
+              <div className="px-4 py-2 border-b bg-muted/50">
+                <div className="grid grid-cols-[64px_1fr] gap-4">
+                  <div />
+                  <div className="grid grid-cols-6 gap-4 text-sm font-medium text-muted-foreground">
+                    <div className="col-span-1">Product</div>
+                    <div className="col-span-1">Case Details</div>
+                    <div className="col-span-1 text-center">Total Items</div>
+                    <div className="col-span-1 text-center">Total Cost</div>
+                    <div className="col-span-1">Quantity</div>
+                    <div className="col-span-1 text-right">Actions</div>
+                  </div>
                 </div>
               </div>
+              <div className="p-4 space-y-4">
+                {items.map((item) => (
+                  <OrderItem
+                    key={item.id}
+                    item={item}
+                    onQuantityChange={handleQuantityChange}
+                    onRemove={() => handleRemoveItem(item.id)}
+                  />
+                ))}
+              </div>
             </div>
-            <div className="p-4 space-y-4">
-              {items.map((item) => (
-                <OrderItem
-                  key={item.id}
-                  item={item}
-                  onQuantityChange={handleQuantityChange}
-                  onRemove={() => handleRemoveItem(item.id)}
-                  isReviewMode={isReviewMode}
-                  isSelected={selectedItems.has(item.id)}
-                  onSelect={() => handleItemSelect(item.id)}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-      <CardFooter className="flex justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">Subtotal</p>
-          <p className="text-xl font-bold">${totalNextOrder.toFixed(2)}</p>
-        </div>
-        <div className="flex gap-2">
-          {isReviewMode ? (
-            <>
-              <Button variant="outline" onClick={handleCancelReview}>
-                Cancel
-              </Button>
-              <Button
-                disabled={selectedItems.size === 0}
-                onClick={handleCompleteOrder}
-              >
-                Complete Order
-              </Button>
-            </>
-          ) : (
-            <Button onClick={handleReviewClick}>Review Order</Button>
           )}
         </div>
-      </CardFooter>
+      </CardContent>
+      {items.length > 0 && (
+        <CardFooter className="flex justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground">Subtotal</p>
+            <p className="text-xl font-bold">${totalNextOrder.toFixed(2)}</p>
+          </div>
+          <Button onClick={handlePlaceOrder}>Place Order</Button>
+        </CardFooter>
+      )}
     </Card>
   )
 }

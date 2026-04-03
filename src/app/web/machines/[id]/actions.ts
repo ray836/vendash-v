@@ -1,58 +1,40 @@
 "use server"
-import { GetMachineWithSlotsUseCase } from "@/domains/VendingMachine/use-cases/GetMachineWithSlotsUseCase"
-import { DrizzleVendingMachineRepository } from "@/infrastructure/repositories/DrizzleVendingMachineRepository"
-import { DrizzleSlotRepository } from "@/infrastructure/repositories/DrizzleSlotRepository"
-import { DrizzleLocationRepository } from "@/infrastructure/repositories/DrizzleLocationRepository"
+
 import { db } from "@/infrastructure/database"
-import { DrizzlePreKitRepository } from "@/infrastructure/repositories/DrizzlePreKitRepository"
-import { CreatePreKitUseCase } from "@/domains/PreKit/use-cases/CreatePreKitUseCase"
-import { GetMachinePreKitUseCase } from "@/domains/PreKit/use-cases/GetMachinePreKitUseCase"
-import { DrizzleProductRepository } from "@/infrastructure/repositories/DrizzleProductRepository"
-import { UpdatePreKitItemsUseCase } from "@/domains/PreKit/use-cases/UpdatePreKitItemsUseCase"
-import { CreatePreKitItemRequest } from "@/domains/PreKit/schemas/CreatePreKitSchemas"
-import { CreatePreKitRequest } from "@/domains/PreKit/schemas/CreatePreKitSchemas"
-import { GetMachinePreKitRequest } from "@/domains/PreKit/schemas/GetMachinePreKitUseCase"
-import {
-  UpdatePreKitItemRequest,
-  UpdatePreKitRequest,
-} from "@/domains/PreKit/schemas/UpdatePreKitSchemas"
-import {
-  MachineWithSlotsDTO,
-  MachineDetailDataDTO,
-} from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
-import { GetTransactionsForMachineUseCase } from "@/domains/Transaction/use-cases/GetTransactionsForMachineUseCase"
-import { DrizzleTransactionRepository } from "@/infrastructure/repositories/DrizzleTransactionRepository"
+import { VendingMachineRepository } from "@/infrastructure/repositories/VendingMachineRepository"
+import { SlotRepository } from "@/infrastructure/repositories/SlotRepository"
+import { LocationRepository } from "@/infrastructure/repositories/LocationRepository"
+import { PreKitRepository } from "@/infrastructure/repositories/PreKitRepository"
+import { TransactionRepository } from "@/infrastructure/repositories/TransactionRepository"
+import { InventoryRepository } from "@/infrastructure/repositories/InventoryRepository"
+import * as VendingMachineService from "@/domains/VendingMachine/VendingMachineService"
+import * as PreKitService from "@/domains/PreKit/PreKitService"
+import * as TransactionService from "@/domains/Transaction/TransactionService"
+import { CreatePreKitItemRequest, CreatePreKitRequest } from "@/domains/PreKit/schemas/CreatePreKitSchemas"
+import { UpdatePreKitItemRequest, UpdatePreKitRequest } from "@/domains/PreKit/schemas/UpdatePreKitSchemas"
+import { MachineWithSlotsDTO, MachineDetailDataDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
+import { auth } from "@/lib/auth"
 
 export async function getMachineWithSlots(machineId: string) {
-  const machineRepo = new DrizzleVendingMachineRepository(db)
-  const slotRepo = new DrizzleSlotRepository(db)
-  const locationRepo = new DrizzleLocationRepository(db)
-  const getMachineWithSlotsUseCase = new GetMachineWithSlotsUseCase(
-    machineRepo,
-    slotRepo,
-    locationRepo
-  )
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+
+  const machineRepo = new VendingMachineRepository(db)
+  const slotRepo = new SlotRepository(db)
+  const locationRepo = new LocationRepository(db)
 
   try {
-    const result: MachineWithSlotsDTO | null =
-      await getMachineWithSlotsUseCase.execute(machineId)
-    if (!result) {
-      throw new Error("Machine not found")
-    }
+    const result: MachineWithSlotsDTO | null = await VendingMachineService.getMachineWithSlots(machineRepo, slotRepo, locationRepo, machineId)
+    if (!result) throw new Error("Machine not found")
 
-    // Wrap the result in an object with a machine property
     return {
       machine: result,
       slots: result.slots,
-      revenue: {
-        daily: 0, // TODO: Implement revenue tracking
-        weekly: 0,
-        monthly: 0,
-      },
+      revenue: { daily: 0, weekly: 0, monthly: 0 },
       setup: result.setup,
       lastRestocked: result.lastRestocked,
       lastMaintenance: result.lastMaintenance,
-      alerts: [], // TODO: Implement alerts tracking
+      alerts: [],
     } as MachineDetailDataDTO
   } catch (error) {
     console.error("Failed to get machine with slots:", error)
@@ -60,24 +42,18 @@ export async function getMachineWithSlots(machineId: string) {
   }
 }
 
-export async function createPreKit(
-  machineId: string,
-  items: CreatePreKitItemRequest[]
-) {
-  try {
-    const preKitRepository = new DrizzlePreKitRepository(db)
-    const createPreKitUseCase = new CreatePreKitUseCase(preKitRepository)
+export async function createPreKit(machineId: string, items: CreatePreKitItemRequest[]) {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
 
+  try {
+    const preKitRepo = new PreKitRepository(db)
     const request: CreatePreKitRequest = {
       machineId,
-      userId: "1", // TODO: Get actual user ID from session
-      items: items.map((item) => ({
-        ...item,
-        preKitId: "", // This will be set by the use case
-      })),
+      userId: session.user.id,
+      items: items.map((item) => ({ ...item, preKitId: "" })),
     }
-
-    const result = await createPreKitUseCase.execute(request)
+    const result = await PreKitService.createPreKit(preKitRepo, request)
     return { success: true, data: result }
   } catch (error) {
     console.error("Failed to create pre-kit:", error)
@@ -86,19 +62,24 @@ export async function createPreKit(
 }
 
 export async function getMachinePreKit(machineId: string) {
-  try {
-    const productRepository = new DrizzleProductRepository(db)
-    const preKitRepository = new DrizzlePreKitRepository(db)
-    const getMachinePreKitUseCase = new GetMachinePreKitUseCase(
-      preKitRepository,
-      productRepository
-    )
-    const request: GetMachinePreKitRequest = {
-      machineId,
-    }
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
 
-    const result = await getMachinePreKitUseCase.execute(request)
-    return { success: true, data: result }
+  try {
+    const preKitRepo = new PreKitRepository(db)
+    const inventoryRepo = new InventoryRepository(db)
+    const [result, inventoryList] = await Promise.all([
+      PreKitService.getMachinePreKit(preKitRepo, machineId),
+      inventoryRepo.findByOrganizationId(organizationId),
+    ])
+    if (!result) return { success: true, data: null }
+    const inventoryMap = new Map(inventoryList.map((inv) => [inv.productId, inv.storage]))
+    const resultWithStock = {
+      ...result,
+      items: result.items.map((item) => ({ ...item, inStock: inventoryMap.get(item.productId) ?? 0 })),
+    }
+    return { success: true, data: resultWithStock }
   } catch (error) {
     console.error("Failed to get machine pre-kit:", error)
     return { success: false, error: "Failed to get machine pre-kit" }
@@ -109,47 +90,30 @@ export async function updatePreKitItems(
   preKitId: string,
   items: UpdatePreKitItemRequest[]
 ): Promise<{ success: boolean; error?: string }> {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+
   try {
-    const preKitRepository = new DrizzlePreKitRepository(db)
-    const updatePreKitItemsUseCase = new UpdatePreKitItemsUseCase(
-      preKitRepository
-    )
-
-    const request: UpdatePreKitRequest = {
-      id: preKitId,
-      userId: "1", // TODO: Get actual user ID from session
-      items,
-    }
-
-    await updatePreKitItemsUseCase.execute(request)
+    const preKitRepo = new PreKitRepository(db)
+    const request: UpdatePreKitRequest = { id: preKitId, userId: session.user.id, items }
+    await PreKitService.updatePreKitItems(preKitRepo, request)
     return { success: true }
   } catch (error) {
     console.error("Failed to update pre-kit items:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    }
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
   }
 }
 
-export async function getMachineTransactions(
-  machineId: string,
-  startDate: Date,
-  endDate: Date
-) {
+export async function getMachineTransactions(machineId: string, startDate: Date, endDate: Date) {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+
   console.log("startDate", startDate)
   console.log("endDate", endDate)
-  const transactionRepository = new DrizzleTransactionRepository(db)
-  const getTransactionsForMachineUseCase = new GetTransactionsForMachineUseCase(
-    transactionRepository
-  )
+  const transactionRepo = new TransactionRepository(db)
 
   try {
-    const result = await getTransactionsForMachineUseCase.execute(
-      machineId,
-      startDate,
-      endDate
-    )
+    const result = await TransactionService.getTransactionsForMachine(transactionRepo, machineId, startDate, endDate)
     console.log("result", result)
     console.log("99999999999  ")
     return { success: true, data: result }

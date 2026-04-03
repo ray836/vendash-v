@@ -4,7 +4,6 @@ import { z } from "zod"
 const saveSlot = SlotSchemas.base
   .pick({
     machineId: true,
-    productId: true,
     labelCode: true,
     price: true,
     capacity: true,
@@ -14,8 +13,9 @@ const saveSlot = SlotSchemas.base
   })
   .extend({
     id: z.string().optional(),
-    row: z.string().optional(),
-    column: z.number().optional(),
+    productId: z.string().uuid().nullable().optional(),
+    rowKey: z.string().nullable().optional(),
+    colIndex: z.number().int().nullable().optional(),
   })
 
 export const SaveSlotsSchemas = {

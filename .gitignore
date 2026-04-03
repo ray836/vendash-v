@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# debug screenshots
+/public/debug/screenshots/*.png
+
+# scraper sessions (contains cookies)
+.scraper-sessions/
+
+# local dev utility scripts
+apply-clerk-migration.ts
+check-db.ts
+fix-duplicate-emails.ts
+fix-nan-labels.ts
+run-migration.ts
+test-db.ts
+test-locations.js
+update-locations.ts
+scripts/

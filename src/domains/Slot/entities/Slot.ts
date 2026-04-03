@@ -42,7 +42,7 @@ export class Slot {
     return this.props.machineId
   }
 
-  public get productId(): string {
+  public get productId(): string | null | undefined {
     return this.props.productId
   }
 

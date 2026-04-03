@@ -1,24 +1,17 @@
 import { Minus, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PublicOrderItemResponseDTO } from "@/domains/Order/schemas/orderDTOs"
-import { Checkbox } from "@/components/ui/checkbox"
 
 interface OrderItemProps {
   item: PublicOrderItemResponseDTO
   onQuantityChange?: (id: string, newQuantity: number) => void
   onRemove?: () => void
-  isReviewMode?: boolean
-  isSelected?: boolean
-  onSelect?: () => void
 }
 
 export function OrderItem({
   item,
   onQuantityChange,
   onRemove,
-  isReviewMode,
-  isSelected,
-  onSelect,
 }: OrderItemProps) {
   const totalItems = item.quantity * item.product.caseSize
   const totalCost = item.quantity * item.product.caseCost
@@ -32,13 +25,7 @@ export function OrderItem({
         className="h-16 w-16 rounded-md object-cover"
       />
 
-      <div
-        className={`flex-1 grid ${
-          isReviewMode
-            ? "grid-cols-[2fr_1.5fr_1fr_1fr_1fr_1.5fr_0.5fr]"
-            : "grid-cols-6"
-        } gap-4 items-center`}
-      >
+      <div className="flex-1 grid grid-cols-6 gap-4 items-center">
         {/* Product Name */}
         <div className="col-span-1">
           <h4 className="font-medium">{item.product.name}</h4>
@@ -102,13 +89,6 @@ export function OrderItem({
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
-
-        {/* Review Checkbox */}
-        {isReviewMode ? (
-          <div className="col-span-1 flex justify-center items-center">
-            <Checkbox checked={isSelected} onCheckedChange={onSelect} />
-          </div>
-        ) : null}
       </div>
     </div>
   )

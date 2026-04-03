@@ -39,6 +39,27 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { getProductById, deleteProduct, updateProduct, type ProductDetailData } from "./actions"
+import { addProductToNextOrder, getCurrentOrder } from "@/app/web/orders/actions"
+import { useRole } from "@/lib/role-context"
+import { UserRole } from "@/domains/User/entities/User"
+import { useRouter } from "next/navigation"
+import { toast } from "@/hooks/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface SalesData {
   date?: string
@@ -55,6 +76,7 @@ interface Product {
   image: string
   price: number
   costPrice: number
+  caseCost: number
   profitMargin: number
   sku: string
   barcode: string
@@ -98,6 +120,10 @@ const getProductData = (id: string) => {
   }
 
   // Extended data for the product detail view
+  const caseQuantity = baseProduct.category === "drink" ? 24 : 36
+  const costPrice = baseProduct.price * 0.6
+  const caseCost = costPrice * caseQuantity
+
   return {
     ...baseProduct,
     description: `Premium quality ${baseProduct.name.toLowerCase()} that's popular among customers of all ages.`,
@@ -111,8 +137,9 @@ const getProductData = (id: string) => {
     lastOrdered: "2023-10-15",
     leadTime: baseProduct.category === "drink" ? 3 : 5, // days
     minOrderQuantity: 24,
-    caseQuantity: baseProduct.category === "drink" ? 24 : 36, // Units per case
-    costPrice: baseProduct.price * 0.6,
+    caseQuantity: caseQuantity,
+    costPrice: costPrice,
+    caseCost: caseCost,
     profitMargin: 40, // percentage
     vendorUrl:
       baseProduct.category === "drink"
@@ -450,29 +477,20 @@ function InventoryStatusBadge({
 }) {
   if (status === "ok") {
     return (
-      <Badge
-        variant="outline"
-        className="bg-green-50 text-green-700 border-green-200"
-      >
-        Good
+      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+        In Stock
       </Badge>
     )
   } else if (status === "warning") {
     return (
-      <Badge
-        variant="outline"
-        className="bg-yellow-50 text-yellow-700 border-yellow-200"
-      >
-        Low
+      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+        Low Stock
       </Badge>
     )
   } else {
     return (
-      <Badge
-        variant="outline"
-        className="bg-red-50 text-red-700 border-red-200"
-      >
-        Critical
+      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+        Needs Reorder
       </Badge>
     )
   }
@@ -511,35 +529,83 @@ function formatDate(dateString: string) {
   }).format(date)
 }
 
-// Update the SalesGraph component to handle different data structures
 function SalesGraph({ product }: SalesGraphProps) {
-  const getPeriodData = () => {
-    return {
-      data: product.weeklySales.map((item) => ({
-        ...item,
-        quantity: item.quantity || item.sales || 0, // Handle both quantity and sales fields
-      })),
-    }
+  const [view, setView] = useState<"daily" | "weekly" | "monthly">("weekly")
+
+  const formatWeekLabel = (weekStr: string) => {
+    // "2026-W10" → parse and show Monday of that week as "Mar 10"
+    const match = weekStr.match(/^(\d{4})-W(\d{1,2})$/)
+    if (!match) return weekStr
+    const year = Number(match[1]), week = Number(match[2])
+    const jan4 = new Date(year, 0, 4)
+    const monday = new Date(jan4)
+    monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (week - 1) * 7)
+    return monday.toLocaleDateString("en-US", { month: "short", day: "numeric" })
   }
 
-  const { data } = getPeriodData()
-  const peakQuantity = Math.max(...data.map((item: SalesData) => item.quantity))
+  const formatMonthLabel = (monthStr: string) => {
+    // "2026-03" → "Mar"
+    const match = monthStr.match(/^(\d{4})-(\d{2})$/)
+    if (!match) return monthStr
+    const date = new Date(Number(match[1]), Number(match[2]) - 1)
+    return date.toLocaleDateString("en-US", { month: "short" })
+  }
+
+  const data = (() => {
+    if (view === "daily") return product.salesHistory.map((d) => ({ label: d.date?.slice(5) ?? "", value: d.quantity }))
+    if (view === "weekly") return product.weeklySales.map((d) => ({ label: formatWeekLabel(d.week ?? ""), value: d.quantity }))
+    return product.monthlySales.map((d) => ({ label: formatMonthLabel(d.month ?? ""), value: d.quantity || d.sales || 0 }))
+  })()
+
+  if (data.length === 0) {
+    return (
+      <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+        <p>No sales data available yet</p>
+      </div>
+    )
+  }
+
+  const peak = Math.max(...data.map((d) => d.value), 1)
+  const chartHeight = 220
 
   return (
-    <div className="space-y-6">
-      <div className="h-[300px] flex items-end gap-2">
-        {data.map((item: SalesData, i: number) => {
-          const height = (item.quantity / peakQuantity) * 100
-          return (
-            <div
-              key={i}
-              className="relative flex-1 group"
-              style={{ height: `${height}%` }}
-            >
-              {/* Bar content */}
-            </div>
-          )
-        })}
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        {(["daily", "weekly", "monthly"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`text-xs px-3 py-1 rounded border capitalize transition-colors ${view === v ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-foreground"}`}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+      <div className="w-full overflow-x-auto">
+        <div
+          className="flex items-end gap-1 px-2"
+          style={{ height: chartHeight + 40, minWidth: data.length * 24 }}
+        >
+          {data.map((item, i) => {
+            const barH = Math.max((item.value / peak) * chartHeight, 2)
+            return (
+              <div
+                key={i}
+                className="flex-1 flex flex-col justify-end items-center"
+                style={{ height: chartHeight + 40 }}
+              >
+                <div
+                  title={`${item.label}: ${item.value} units`}
+                  className="w-full bg-green-500 hover:bg-green-400 rounded-t-sm transition-colors cursor-pointer"
+                  style={{ height: barH }}
+                />
+                <span className="text-[9px] text-muted-foreground mt-1 truncate w-full text-center" style={{ maxWidth: 48 }}>
+                  {item.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -547,18 +613,190 @@ function SalesGraph({ product }: SalesGraphProps) {
 
 // Update the ProductDetail component to handle case quantities
 export function ProductDetail({ productId }: { productId: string }) {
-  const [product, setProduct] = useState<ReturnType<
-    typeof getProductData
-  > | null>(null)
-  const [reorderCases, setReorderCases] = useState("5")
+  const { role } = useRole()
+  const canEditProducts = role !== UserRole.DRIVER
+  const [product, setProduct] = useState<ProductDetailData | null>(null)
+  const [reorderCases, setReorderCases] = useState("1")
+  const [isLoading, setIsLoading] = useState(true)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isInNextOrder, setIsInNextOrder] = useState(false)
+  const [isAddingToOrder, setIsAddingToOrder] = useState(false)
+  const router = useRouter()
+
+  // Edit form state
+  const [editForm, setEditForm] = useState({
+    name: "",
+    recommendedPrice: "",
+    category: "",
+    image: "",
+    vendorLink: "",
+    caseCost: "",
+    caseSize: "",
+    shippingAvailable: true,
+    shippingTimeInDays: "",
+    reorderPoint: "",
+    aliases: [] as string[],
+  })
+  const [aliasInput, setAliasInput] = useState("")
 
   useEffect(() => {
-    setProduct(getProductData(productId))
+    async function fetchProduct() {
+      setIsLoading(true)
+      const [data, orderResult] = await Promise.all([
+        getProductById(productId),
+        getCurrentOrder(),
+      ])
+      setProduct(data)
+      if (data) {
+        const deficit = data.reorderPoint - data.inventory.total
+        const casesNeeded = deficit > 0 ? Math.ceil(deficit / data.caseQuantity) : 1
+        setReorderCases(String(Math.max(1, casesNeeded)))
+      }
+      if (orderResult.success && orderResult.order) {
+        setIsInNextOrder(orderResult.order.orderItems.some((i) => i.product.id === productId))
+      }
+      setIsLoading(false)
+    }
+    fetchProduct()
   }, [productId])
+
+  const handleEditClick = () => {
+    if (product) {
+      setEditForm({
+        name: product.name,
+        recommendedPrice: product.price.toString(),
+        category: product.category,
+        image: product.image,
+        vendorLink: product.vendorUrl,
+        caseCost: product.caseCost.toString(),
+        caseSize: product.caseQuantity.toString(),
+        shippingAvailable: product.shippingAvailable || false,
+        shippingTimeInDays: product.leadTime?.toString() || "0",
+        reorderPoint: product.reorderPoint?.toString() || "",
+        aliases: product.aliases ?? [],
+      })
+      setAliasInput("")
+      setIsEditDialogOpen(true)
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    if (!product) return
+
+    setIsSaving(true)
+    try {
+      const result = await updateProduct({
+        id: product.id,
+        name: editForm.name,
+        recommendedPrice: parseFloat(editForm.recommendedPrice),
+        category: editForm.category,
+        image: editForm.image,
+        vendorLink: editForm.vendorLink,
+        caseCost: parseFloat(editForm.caseCost),
+        caseSize: parseFloat(editForm.caseSize),
+        shippingAvailable: editForm.shippingAvailable,
+        shippingTimeInDays: parseInt(editForm.shippingTimeInDays),
+        reorderPoint: editForm.reorderPoint ? parseInt(editForm.reorderPoint) : undefined,
+        aliases: editForm.aliases,
+      })
+
+      if (result.success) {
+        toast({
+          title: "Product updated",
+          description: "The product has been successfully updated.",
+        })
+        setIsEditDialogOpen(false)
+        // Refresh product data
+        const updatedProduct = await getProductById(productId)
+        setProduct(updatedProduct)
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: result.error || "Failed to update product",
+        })
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleAddToNextOrder = async () => {
+    if (!product || isInNextOrder) return
+    setIsAddingToOrder(true)
+    try {
+      const result = await addProductToNextOrder(product.id, parseInt(reorderCases) || 1)
+      if (result.success) {
+        setIsInNextOrder(true)
+        toast({ title: "Added to next order", description: `${reorderCases} case(s) added.` })
+      } else {
+        toast({ variant: "destructive", title: "Error", description: result.error || "Failed to add to order" })
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Error", description: "Failed to add to order" })
+    } finally {
+      setIsAddingToOrder(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm(`Are you sure you want to delete "${product?.name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const result = await deleteProduct(productId)
+
+      if (result.success) {
+        toast({
+          title: "Product deleted",
+          description: "The product has been successfully deleted.",
+        })
+        router.push("/web/products")
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: result.error || "Failed to delete product",
+        })
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "An unexpected error occurred",
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">Loading...</div>
+    )
+  }
 
   if (!product) {
     return (
-      <div className="flex justify-center items-center h-64">Loading...</div>
+      <div className="flex flex-col justify-center items-center h-64 gap-4">
+        <p className="text-muted-foreground">Product not found</p>
+        <Link href="/web/products">
+          <Button variant="outline">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Products
+          </Button>
+        </Link>
+      </div>
     )
   }
 
@@ -573,9 +811,9 @@ export function ProductDetail({ productId }: { productId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Header section remains the same */}
-      <div className="flex items-center justify-between">
-        <div>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
           <Link
             href="/web/products"
             className="flex items-center text-sm text-muted-foreground hover:text-primary mb-2"
@@ -583,34 +821,206 @@ export function ProductDetail({ productId }: { productId: string }) {
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back to Products
           </Link>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{product.name}</h1>
+          <h1 className="text-2xl font-bold leading-tight">{product.name}</h1>
+          <div className="flex items-center gap-2 mt-2">
             <Badge variant="outline" className="capitalize">
               {product.category}
             </Badge>
             <InventoryStatusBadge status={product.reorderStatus} />
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Edit className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-          <Button variant="destructive" size="sm">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
-        </div>
+        {canEditProducts && (
+          <div className="flex gap-2 flex-shrink-0 mt-1">
+            <Button variant="outline" size="sm" onClick={handleEditClick}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Edit Product Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+            <DialogDescription>
+              Update product information and pricing details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Product Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>
+                Aliases{" "}
+                <span className="text-xs text-muted-foreground font-normal">
+                  (alternate names used for AI slot matching)
+                </span>
+              </Label>
+              <div className="flex flex-wrap gap-1 min-h-[36px] p-2 border rounded-md bg-background">
+                {editForm.aliases.map((alias, i) => (
+                  <Badge key={i} variant="secondary" className="gap-1 pl-2 pr-1 text-sm">
+                    {alias}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditForm({
+                          ...editForm,
+                          aliases: editForm.aliases.filter((_, j) => j !== i),
+                        })
+                      }
+                      className="ml-1 hover:text-destructive leading-none"
+                      aria-label={`Remove alias ${alias}`}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+                {editForm.aliases.length === 0 && (
+                  <span className="text-xs text-muted-foreground self-center">No aliases yet</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Type an alias and press Enter"
+                  value={aliasInput}
+                  onChange={(e) => setAliasInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      const val = aliasInput.trim()
+                      if (val && !editForm.aliases.includes(val)) {
+                        setEditForm({ ...editForm, aliases: [...editForm.aliases, val] })
+                        setAliasInput("")
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-category">Category</Label>
+                <Select
+                  value={editForm.category}
+                  onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+                >
+                  <SelectTrigger id="edit-category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="snack">Snack</SelectItem>
+                    <SelectItem value="drink">Drink</SelectItem>
+                    <SelectItem value="candy">Candy</SelectItem>
+                    <SelectItem value="cookies">Cookies</SelectItem>
+                    <SelectItem value="chips">Chips</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-price">Recommended Price</Label>
+                <Input
+                  id="edit-price"
+                  type="number"
+                  step="0.01"
+                  value={editForm.recommendedPrice}
+                  onChange={(e) => setEditForm({ ...editForm, recommendedPrice: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-case-cost">Case Cost</Label>
+                <Input
+                  id="edit-case-cost"
+                  type="number"
+                  step="0.01"
+                  value={editForm.caseCost}
+                  onChange={(e) => setEditForm({ ...editForm, caseCost: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-case-size">Case Size</Label>
+                <Input
+                  id="edit-case-size"
+                  type="number"
+                  value={editForm.caseSize}
+                  onChange={(e) => setEditForm({ ...editForm, caseSize: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-image">Image URL</Label>
+              <Input
+                id="edit-image"
+                value={editForm.image}
+                onChange={(e) => setEditForm({ ...editForm, image: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-vendor">Vendor Link</Label>
+              <Input
+                id="edit-vendor"
+                value={editForm.vendorLink}
+                onChange={(e) => setEditForm({ ...editForm, vendorLink: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-shipping-time">Shipping Time (days)</Label>
+              <Input
+                id="edit-shipping-time"
+                type="number"
+                value={editForm.shippingTimeInDays}
+                onChange={(e) => setEditForm({ ...editForm, shippingTimeInDays: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-reorder-point">Reorder Point (units)</Label>
+              <Input
+                id="edit-reorder-point"
+                type="number"
+                placeholder={`Default: ${product ? Math.round(product.caseQuantity * 3) : ""}`}
+                value={editForm.reorderPoint}
+                onChange={(e) => setEditForm({ ...editForm, reorderPoint: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Product info cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Product Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-center mb-4">
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={product.image || "/placeholder.svg"}
@@ -619,37 +1029,39 @@ export function ProductDetail({ productId }: { productId: string }) {
               />
             </div>
 
+            {/* Key pricing metrics */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="border rounded-md p-3 text-center">
+                <div className="text-xs text-muted-foreground mb-1">Sale Price</div>
+                <div className="text-lg font-bold">${product.price.toFixed(2)}</div>
+              </div>
+              <div className="border rounded-md p-3 text-center">
+                <div className="text-xs text-muted-foreground mb-1">Margin</div>
+                <div className="text-lg font-bold text-green-600">{product.profitMargin}%</div>
+              </div>
+            </div>
+
+            <Separator />
+
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Price:</span>
-                <span className="font-medium">${product.price.toFixed(2)}</span>
+                <span className="text-muted-foreground">Unit Cost:</span>
+                <span className="font-medium">${product.costPrice.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Cost:</span>
-                <span className="font-medium">
-                  ${product.costPrice.toFixed(2)}
-                </span>
+                <span className="text-muted-foreground">Case Cost:</span>
+                <span className="font-medium">${(product.caseCost || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Profit Margin:</span>
-                <span className="font-medium">{product.profitMargin}%</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">SKU:</span>
-                <span className="font-medium">{product.sku}</span>
+                <span className="text-muted-foreground">Case Size:</span>
+                <span className="font-medium">{product.caseQuantity} units</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Barcode:</span>
-                <span className="font-medium">{product.barcode}</span>
+                <span className="text-muted-foreground">Lead Time:</span>
+                <span className="font-medium">{product.leadTime} days</span>
               </div>
-              <Separator />
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Supplier:</span>
-                <span className="font-medium">{product.supplier}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Vendor Link:</span>
                 <a
                   href={product.vendorUrl}
                   target="_blank"
@@ -658,22 +1070,6 @@ export function ProductDetail({ productId }: { productId: string }) {
                 >
                   Sam&apos;s Club <ExternalLink className="h-3 w-3 ml-1" />
                 </a>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Lead Time:</span>
-                <span className="font-medium">{product.leadTime} days</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Case Quantity:</span>
-                <span className="font-medium">
-                  {product.caseQuantity} units/case
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Min Order:</span>
-                <span className="font-medium">
-                  {product.minOrderQuantity} units
-                </span>
               </div>
             </div>
           </CardContent>
@@ -687,126 +1083,100 @@ export function ProductDetail({ productId }: { productId: string }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Total Inventory
-                  </span>
-                  <span className="text-sm font-medium">
-                    {product.inventory.total} units
-                  </span>
-                </div>
-                <Progress
-                  value={Math.min(
-                    100,
-                    (product.inventory.total / product.reorderPoint) * 100
-                  )}
-                  className="h-2"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Reorder Point: {product.reorderPoint}</span>
-                  <span>
-                    {product.daysUntilStockout <= 3 ? (
-                      <span className="text-red-600 font-medium">
-                        {product.daysUntilStockout} days left
-                      </span>
-                    ) : product.daysUntilStockout <= 7 ? (
-                      <span className="text-yellow-600">
-                        {product.daysUntilStockout} days left
-                      </span>
-                    ) : (
-                      <span>{product.daysUntilStockout} days left</span>
-                    )}
-                  </span>
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    In Storage
-                  </span>
-                  <span className="text-sm font-medium">
-                    {product.inventory.storage} units
-                  </span>
-                </div>
-                <Progress
-                  value={
-                    (product.inventory.storage / product.inventory.total) * 100
-                  }
-                  className="h-2"
-                />
-                <div className="text-xs text-muted-foreground">
-                  {Math.round(
-                    (product.inventory.storage / product.inventory.total) * 100
-                  )}
-                  % of total inventory
-                </div>
+            {/* Total count + stockout status */}
+            <div className="flex items-end justify-between">
+              <div>
+                <span className="text-3xl font-bold">{product.inventory.total}</span>
+                <span className="text-muted-foreground ml-1 text-sm">units total</span>
               </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    In Machines
-                  </span>
-                  <span className="text-sm font-medium">
-                    {product.inventory.machines} units
-                  </span>
-                </div>
-                <Progress
-                  value={
-                    (product.inventory.machines / product.inventory.total) * 100
-                  }
-                  className="h-2"
-                />
-                <div className="text-xs text-muted-foreground">
-                  {Math.round(
-                    (product.inventory.machines / product.inventory.total) * 100
-                  )}
-                  % of total inventory
-                </div>
+              <div className="text-sm font-medium">
+                {product.inventory.total === 0 ? (
+                  <span className="text-red-500">Out of Stock</span>
+                ) : product.daysUntilStockout > 0 && product.daysUntilStockout <= 3 ? (
+                  <span className="text-red-500">{product.daysUntilStockout} days left</span>
+                ) : product.daysUntilStockout > 0 && product.daysUntilStockout <= 7 ? (
+                  <span className="text-yellow-500">{product.daysUntilStockout} days left</span>
+                ) : product.daysUntilStockout > 0 ? (
+                  <span className="text-muted-foreground">{product.daysUntilStockout} days left</span>
+                ) : null}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex flex-col gap-1 p-3 border rounded-md">
-                <span className="text-xs text-muted-foreground">
-                  Daily Sales
-                </span>
+            {/* Stacked bar */}
+            {(() => {
+              const scale = Math.max(product.inventory.total, product.reorderPoint, 1)
+              const storagePct = (product.inventory.storage / scale) * 100
+              const machinesPct = (product.inventory.machines / scale) * 100
+              // Clamp so the marker never bleeds off the right edge
+              const reorderPct = Math.min((product.reorderPoint / scale) * 100, 99.5)
+              return (
+                <div className="space-y-3">
+                  {/* Bar with marker inside */}
+                  <div className="relative h-5 rounded-full overflow-hidden bg-muted flex">
+                    <div
+                      className="h-full bg-blue-500"
+                      style={{ width: `${storagePct}%` }}
+                    />
+                    <div
+                      className="h-full bg-violet-500"
+                      style={{ width: `${machinesPct}%` }}
+                    />
+                    {/* Reorder point line — absolutely positioned inside the bar */}
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-red-400"
+                      style={{ left: `${reorderPct}%` }}
+                    />
+                  </div>
+                  {/* Legend */}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-4">
+                      <span className="flex items-center gap-1.5">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-500" />
+                        Storage — {product.inventory.storage} units
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-violet-500" />
+                        In Machines — {product.inventory.machines} units
+                      </span>
+                    </div>
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block w-0.5 h-3 bg-red-400" />
+                      Reorder at {product.reorderPoint}
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+
+            <Separator />
+
+            {/* Sales metrics */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Daily Sales</span>
                 <div className="flex items-center gap-1">
                   <SalesTrendIndicator trend={product.sales.trend} />
-                  <span className="text-lg font-medium">
-                    {product.sales.daily}/day
-                  </span>
+                  <span className="text-lg font-semibold">{product.sales.daily}/day</span>
                 </div>
               </div>
-
-              <div className="flex flex-col gap-1 p-3 border rounded-md">
-                <span className="text-xs text-muted-foreground">
-                  Sales Velocity
-                </span>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Weekly Avg</span>
                 <div className="flex items-center gap-2">
+                  <span className="text-lg font-semibold">{product.sales.weekly}/wk</span>
                   <SalesVelocityBadge velocity={product.sales.velocity} />
-                  <span className="text-lg font-medium">
-                    {product.sales.weekly}/week
-                  </span>
                 </div>
               </div>
-
-              <div className="flex flex-col gap-1 p-3 border rounded-md">
-                <span className="text-xs text-muted-foreground">
-                  Last Ordered
-                </span>
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-lg font-medium">
-                    {formatDate(product.lastOrdered)}
-                  </span>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Last Ordered</span>
+                <div className="flex items-center gap-1 text-sm font-medium">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                  {formatDate(product.lastOrdered)}
                 </div>
               </div>
             </div>
 
+            <Separator />
             <div className="pt-2">
               <h3 className="text-sm font-medium mb-3">Reorder Product</h3>
               <div className="flex gap-3">
@@ -832,12 +1202,18 @@ export function ProductDetail({ productId }: { productId: string }) {
                 <div className="flex items-end">
                   <Button
                     className="flex-shrink-0"
-                    variant={
-                      product.reorderStatus === "ok" ? "outline" : "default"
-                    }
+                    variant={isInNextOrder ? "secondary" : product.reorderStatus === "ok" ? "outline" : "default"}
+                    onClick={handleAddToNextOrder}
+                    disabled={isInNextOrder || isAddingToOrder}
                   >
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Reorder Now
+                    {isInNextOrder ? (
+                      <>On Next Order</>
+                    ) : (
+                      <>
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        {isAddingToOrder ? "Adding..." : "Next Order"}
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -857,8 +1233,8 @@ export function ProductDetail({ productId }: { productId: string }) {
           <TabsTrigger value="sales">Sales Data</TabsTrigger>
           <TabsTrigger value="distribution">Machine Distribution</TabsTrigger>
           <TabsTrigger value="history">Order History</TabsTrigger>
+          <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
-        {/* // Replace the sales tab content with this updated version */}
         <TabsContent value="sales" className="mt-6">
           <Card>
             <CardHeader>
@@ -910,16 +1286,26 @@ export function ProductDetail({ productId }: { productId: string }) {
                 </TableBody>
               </Table>
 
-              <div className="mt-6 flex justify-between items-center">
-                <div className="text-sm text-muted-foreground">
-                  Total in machines: {product.inventory.machines} units across{" "}
-                  {product.machineDistribution.length} machines
+              {product.machineDistribution.length > 0 ? (
+                <div className="mt-6 flex justify-between items-center">
+                  <div className="text-sm text-muted-foreground">
+                    Total in machines: {product.inventory.machines} units across{" "}
+                    {product.machineDistribution.length} machines
+                  </div>
+                  <Button size="sm">
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Add to Machine
+                  </Button>
                 </div>
-                <Button size="sm">
-                  <PlusCircle className="h-4 w-4 mr-2" />
-                  Add to Machine
-                </Button>
-              </div>
+              ) : (
+                <div className="mt-6 text-center py-8 text-muted-foreground">
+                  <p>Not yet distributed to any machines</p>
+                  <Button size="sm" className="mt-4">
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Add to Machine
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -956,12 +1342,14 @@ export function ProductDetail({ productId }: { productId: string }) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        ${(order.quantity * product.costPrice).toFixed(2)}
+                        ${order.totalCost.toFixed(2)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm">
-                          <History className="h-4 w-4 mr-2" />
-                          Details
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={`/web/orders/${order.orderId}`}>
+                            <History className="h-4 w-4 mr-2" />
+                            Details
+                          </a>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -969,16 +1357,62 @@ export function ProductDetail({ productId }: { productId: string }) {
                 </TableBody>
               </Table>
 
-              <div className="mt-6 flex justify-between items-center">
-                <div className="text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4 inline mr-1" />
-                  Last order placed on{" "}
-                  {formatDate(product.reorderHistory[0].date)}
+              {product.reorderHistory.length > 0 && (
+                <div className="mt-6 flex justify-between items-center">
+                  <div className="text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4 inline mr-1" />
+                    Last order placed on{" "}
+                    {formatDate(product.reorderHistory[0].date)}
+                  </div>
+                  <Button size="sm">
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Place New Order
+                  </Button>
                 </div>
-                <Button size="sm">
-                  <PlusCircle className="h-4 w-4 mr-2" />
-                  Place New Order
-                </Button>
+              )}
+              {product.reorderHistory.length === 0 && (
+                <div className="mt-6 text-center py-8 text-muted-foreground">
+                  <p>No order history yet</p>
+                  <Button size="sm" className="mt-4">
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Place First Order
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="details" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Product Details</CardTitle>
+              <CardDescription>SKU, barcode, and supplier information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-w-sm">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">SKU:</span>
+                  <span className="font-mono font-medium">{product.sku}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Barcode:</span>
+                  <span className="font-mono font-medium">{product.barcode}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Supplier:</span>
+                  <span className="font-medium">{product.supplier}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Vendor Link:</span>
+                  <a href={product.vendorUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary flex items-center hover:underline">
+                    Sam&apos;s Club <ExternalLink className="h-3 w-3 ml-1" />
+                  </a>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Min Order:</span>
+                  <span className="font-medium">{product.minOrderQuantity} units</span>
+                </div>
               </div>
             </CardContent>
           </Card>

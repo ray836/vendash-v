@@ -3,17 +3,15 @@
 import { useState, useEffect } from "react"
 import {
   ArrowLeft,
-  Settings,
-  Banknote,
   Package,
   Calendar,
   MapPin,
-  BarChart3,
   Plus,
   Minus,
   Check,
   Loader2,
   X,
+  AlertTriangle,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -140,6 +138,8 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const [isLoadingPreKit, setIsLoadingPreKit] = useState(false)
   const [hasExistingPreKit, setHasExistingPreKit] = useState(false)
   const [isEditingPreKit, setIsEditingPreKit] = useState(false)
+  const [isCreatingPreKit, setIsCreatingPreKit] = useState(false)
+  const [preKitStatus, setPreKitStatus] = useState<"OPEN" | "PICKED" | "STOCKED" | null>(null)
   const [salesData, setSalesData] =
     useState<GetTransactionsForMachineResponseDTO | null>(null)
   const [isLoadingSales, setIsLoadingSales] = useState(false)
@@ -154,6 +154,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
       const result = await getMachinePreKit(id)
       if (result.success && result.data) {
         setHasExistingPreKit(true)
+        setPreKitStatus(result.data.status as "OPEN" | "PICKED" | "STOCKED")
         // Convert pre-kit items to PreKitItem format
         const items = result.data.items
           .map((item) => {
@@ -170,6 +171,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
               currentQuantity: slot.currentQuantity,
               capacity: slot.capacity,
               slotCode: slot.labelCode,
+              inStock: item.inStock,
             }
             return preKitItem
           })
@@ -257,8 +259,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   }
 
   const handleSlotClick = (slot: PublicSlotWithProductDTO) => {
-    // Allow adding items to pre-kit when in edit mode or when there's no pre-kit
-    if (!isEditingPreKit && hasExistingPreKit) return
+    if (!isEditingPreKit && !isCreatingPreKit) return
 
     if (!slot.productId) return
 
@@ -313,9 +314,9 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   }
 
   const handleCancelEdit = () => {
-    // Reset to the original pre-kit items
     fetchPreKit()
     setIsEditingPreKit(false)
+    setIsCreatingPreKit(false)
   }
 
   const handleCreatePreKit = async () => {
@@ -361,6 +362,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
         // Refresh the pre-kit data
         await fetchPreKit()
         setIsEditingPreKit(false)
+        setIsCreatingPreKit(false)
       } catch (error) {
         console.error("Failed to create/update pre-kit:", error)
       }
@@ -371,83 +373,19 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
     setPreKitItems(preKitItems.filter((item) => item.slotId !== slotId))
   }
 
-  console.log("salesData", salesData)
-  console.log("chart data", Object.entries(salesData?.daily ?? {}))
 
-  // Helper to group and sum transactions by period
-  type PublicTransaction = typeof TransactionSchemas.public._type
-
-  function groupAndSum(
-    transactions: PublicTransaction[],
-    period: "daily" | "weekly" | "monthly"
-  ) {
-    const map = new Map<string, number>()
-    transactions.forEach((tx) => {
-      let key = ""
-      if (period === "daily") {
-        key = tx.createdAt.toISOString().split("T")[0]
-      } else if (period === "weekly") {
-        const d = new Date(
-          Date.UTC(
-            tx.createdAt.getFullYear(),
-            tx.createdAt.getMonth(),
-            tx.createdAt.getDate()
-          )
-        )
-        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7))
-        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-        const weekNo = Math.ceil(
-          ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7
-        )
-        key = `${d.getUTCFullYear()}-W${weekNo}`
-      } else if (period === "monthly") {
-        key = `${tx.createdAt.getFullYear()}-${String(
-          tx.createdAt.getMonth() + 1
-        ).padStart(2, "0")}`
-      }
-      map.set(key, (map.get(key) || 0) + tx.total)
-    })
-    // Sort keys chronologically
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([period, sales]) => ({ period, sales }))
-  }
-
-  const dummyData = [
-    { period: "2025-04-08", sales: 10 },
-    { period: "2025-04-09", sales: 20 },
-    { period: "2025-04-10", sales: 5 },
-  ]
-  console.log("Dummy chart data", dummyData)
-
-  // Helper to filter daily data to last 30 days
-  const now = new Date()
-  const thirtyDaysAgo = new Date()
-  thirtyDaysAgo.setDate(now.getDate() - 30)
-
-  const filteredDailyData = salesData?.daily
-    ? salesData.daily.filter((item) => {
-        // Use only item.createdAt for the date
-        const date = new Date(item.createdAt)
-        return date >= thirtyDaysAgo && date <= now
-      })
-    : []
-
-  // When preparing data for SalesChart, only pass last 15 items if on mobile
+  // Use pre-computed chart data from server to avoid client-side Date issues
   function getChartData(): SalesChartData[] {
     if (!salesData) return []
-    let chartData: SalesChartData[] = []
+    let chartData: SalesChartData[]
     if (groupBy === GroupByType.DAY) {
-      chartData = groupAndSum(filteredDailyData, "daily")
+      chartData = salesData.dailyChartData.slice(-30)
     } else if (groupBy === GroupByType.WEEK) {
-      chartData = groupAndSum(salesData.weekly, "weekly")
-    } else if (groupBy === GroupByType.MONTH) {
-      chartData = groupAndSum(salesData.monthly, "monthly")
+      chartData = salesData.weeklyChartData.slice(-12)
+    } else {
+      chartData = salesData.monthlyChartData
     }
-    if (isMobile) {
-      return chartData.slice(-15)
-    }
-    return chartData
+    return isMobile ? chartData.slice(-15) : chartData
   }
 
   return (
@@ -477,143 +415,52 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
           </p>
         </div>
         {/* Desktop buttons */}
-        <div className="hidden sm:flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Settings className="h-4 w-4 mr-2" />
-            Manage
-          </Button>
-          {!isSetup && (
+        {!isSetup && (
+          <div className="hidden sm:flex items-center gap-2">
             <Button size="sm" onClick={handleSetupClick}>
               Setup Machine
             </Button>
-          )}
-          {isSetup && (
-            <Button size="sm" onClick={handleSetupClick}>
-              Edit Configuration
-            </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       {/* Mobile buttons */}
-      <div className="flex flex-col gap-2 mt-2 sm:hidden">
-        <Button variant="outline" size="sm">
-          <Settings className="h-4 w-4 mr-2" />
-          Manage
-        </Button>
-        {!isSetup && (
+      {!isSetup && (
+        <div className="flex flex-col gap-2 mt-2 sm:hidden">
           <Button size="sm" onClick={handleSetupClick}>
             Setup Machine
           </Button>
-        )}
-        {isSetup && (
-          <Button size="sm" onClick={handleSetupClick}>
-            Edit Configuration
-          </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="space-y-6 mt-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Setup Status</CardTitle>
-              <CardDescription>
-                {isSetup
-                  ? `${slots.length} slots configured`
-                  : "Machine needs to be configured"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>{setupPercentage}% Complete</span>
-                  <span className="text-muted-foreground">
-                    {slots.length} slots configured
-                  </span>
+          {!isSetup && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Setup Status</CardTitle>
+                <CardDescription>
+                  Machine needs to be configured
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>{setupPercentage}% Complete</span>
+                    <span className="text-muted-foreground">
+                      {slots.length} slots configured
+                    </span>
+                  </div>
+                  <Progress value={setupPercentage} className="h-2" />
                 </div>
-                <Progress value={setupPercentage} className="h-2" />
-              </div>
-            </CardContent>
-            <CardFooter>
-              {!isSetup && (
+              </CardContent>
+              <CardFooter>
                 <Button className="w-full" size="sm" onClick={handleSetupClick}>
                   Configure Products
                 </Button>
-              )}
-              {isSetup && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  size="sm"
-                  onClick={handleSetupClick}
-                >
-                  Edit Configuration
-                </Button>
-              )}
-            </CardFooter>
-          </Card>
+              </CardFooter>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Revenue</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Daily Revenue</p>
-                    <p className="text-2xl font-bold">
-                      ${revenue.daily.toFixed(2)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Weekly Revenue</p>
-                    <p className="text-2xl font-bold">
-                      ${revenue.weekly.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Monthly Revenue</p>
-                  <p className="text-2xl font-bold">
-                    ${revenue.monthly.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Inventory Status</CardTitle>
-              <CardDescription>Current stock level</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>{calculateOverallInventory(slots)}% Full</span>
-                  <span className="text-muted-foreground">
-                    {slots.reduce((sum, slot) => sum + slot.currentQuantity, 0)}{" "}
-                    / {slots.reduce((sum, slot) => sum + slot.capacity, 0)}{" "}
-                    items
-                  </span>
-                </div>
-                <Progress
-                  value={calculateOverallInventory(slots)}
-                  className="h-2"
-                />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <div className="w-full flex justify-between text-sm">
-                <span className="flex items-center text-muted-foreground">
-                  <Calendar className="h-4 w-4 mr-1" />
-                  Last Restocked
-                </span>
-                <span>{lastRestocked ? formatDate(lastRestocked) : "N/A"}</span>
-              </div>
-            </CardFooter>
-          </Card>
 
           {/* Alerts Card - Commented out for future use
           <Card>
@@ -677,61 +524,15 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-medium leading-none">
-                      Machine Type
-                    </h3>
-                    <p className="text-sm text-muted-foreground capitalize">
-                      {machine.type} Machine
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-medium leading-none">
-                      Location
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {machine.locationId}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-medium leading-none">Status</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {machine.status}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-medium leading-none">
-                      Total Slots
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {slots.length} slots
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-medium leading-none">
-                      Configured Slots
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {slots.length} slots ({setupPercentage}%)
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-medium leading-none">
-                      Inventory Level
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {calculateOverallInventory(slots)}% full
-                    </p>
-                  </div>
-                </div>
-
-                <Separator className="my-6" />
-
                 <div className="grid gap-6 md:grid-cols-[3fr_2fr]">
                   <div>
                     <div className="space-y-4">
-                      <h3 className="text-sm font-medium">Machine Layout</h3>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium">Machine Layout</h3>
+                        <Button variant="outline" size="sm" onClick={handleSetupClick}>
+                          Edit Configuration
+                        </Button>
+                      </div>
                       <div className="space-y-4">
                         {Object.entries(organizeSlotsByRow(slots)).map(
                           ([row, rowSlots]) => (
@@ -756,7 +557,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                                                 : ""
                                             }
                                             ${
-                                              slot.productId && isEditingPreKit
+                                              slot.productId && (isEditingPreKit || isCreatingPreKit)
                                                 ? "cursor-pointer hover:bg-primary/20"
                                                 : ""
                                             }
@@ -815,88 +616,51 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-medium">Activity Panel</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-medium">Pre-Kit</h3>
+                        {preKitStatus && !isCreatingPreKit && !isEditingPreKit && (
+                          <Badge
+                            className={
+                              preKitStatus === "STOCKED"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                : preKitStatus === "PICKED"
+                                ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                            }
+                          >
+                            {preKitStatus}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                    <Tabs defaultValue="activity" className="w-full">
-                      <TabsList className="w-full">
-                        <TabsTrigger value="activity" className="flex-1">
-                          Recent Activity
-                        </TabsTrigger>
-                        <TabsTrigger value="prekit" className="flex-1">
-                          Pre-Kit
-                        </TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="activity" className="mt-4">
-                        <div className="space-y-4">
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium leading-none">
-                                Restocked
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {lastRestocked
-                                  ? formatDate(lastRestocked)
-                                  : "N/A"}
-                              </p>
-                            </div>
-                            <Package className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium leading-none">
-                                Maintenance
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {lastMaintenance
-                                  ? formatDate(lastMaintenance)
-                                  : "N/A"}
-                              </p>
-                            </div>
-                            <Settings className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium leading-none">
-                                Last Sale
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                Today, 10:42 AM
-                              </p>
-                            </div>
-                            <Banknote className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      </TabsContent>
-                      <TabsContent value="prekit" className="mt-4">
+                    <div className="mt-4">
                         <div className="space-y-4">
                           {isLoadingPreKit ? (
                             <div className="flex items-center justify-center py-8">
                               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                             </div>
-                          ) : preKitItems.length === 0 ? (
+                          ) : !hasExistingPreKit && !isCreatingPreKit ? (
+                            <div className="flex flex-col items-center justify-center py-6 gap-3 text-center">
+                              <p className="text-sm text-muted-foreground">No pre-kit for this machine yet.</p>
+                              <Button className="w-full" onClick={() => { setIsCreatingPreKit(true); setPreKitItems([]) }}>
+                                Create Pre-Kit
+                              </Button>
+                            </div>
+                          ) : isCreatingPreKit && preKitItems.length === 0 ? (
                             <div className="space-y-4">
-                              <div className="text-center text-muted-foreground py-4">
-                                Click on slots in the machine layout to add
-                                items to your pre-kit
+                              <div className="text-center text-sm text-muted-foreground py-4">
+                                Click slots in the machine layout to add items to your pre-kit
                               </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  className="flex-1"
-                                  onClick={handleCreatePreKit}
-                                  disabled={
-                                    isPending || preKitItems.length === 0
-                                  }
-                                >
-                                  {isPending
-                                    ? "Processing..."
-                                    : "Create Pre-kit"}
-                                </Button>
-                              </div>
+                              <Button variant="outline" className="w-full" onClick={handleCancelEdit}>
+                                Cancel
+                              </Button>
                             </div>
                           ) : (
                             <>
                               <div className="space-y-2">
-                                {preKitItems.map((item) => (
+                                {preKitItems.map((item) => {
+                                  const isShort = item.inStock !== undefined && item.quantity > item.inStock
+                                  return (
                                   <div
                                     key={item.slotId}
                                     className="flex items-center justify-between p-2 border rounded-md"
@@ -927,10 +691,22 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                                             Current: {item.currentQuantity}/
                                             {item.capacity}
                                           </span>
+                                          {item.inStock !== undefined && (
+                                            <span
+                                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                                                isShort
+                                                  ? "bg-red-950 text-red-400 border-red-800"
+                                                  : "bg-transparent text-muted-foreground border-border"
+                                              }`}
+                                            >
+                                              {isShort && <AlertTriangle className="h-2.5 w-2.5" />}
+                                              Stock: {item.inStock}
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
-                                    {isEditingPreKit ? (
+                                    {(isEditingPreKit || isCreatingPreKit) ? (
                                       <div className="flex items-center gap-2">
                                         <Button
                                           variant="outline"
@@ -989,7 +765,8 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                                       </div>
                                     )}
                                   </div>
-                                ))}
+                                  )
+                                })}
                               </div>
                               <div className="flex gap-2">
                                 {hasExistingPreKit && !isEditingPreKit ? (
@@ -1029,8 +806,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                             </>
                           )}
                         </div>
-                      </TabsContent>
-                    </Tabs>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -1150,48 +926,64 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-medium">Overall Inventory</h3>
-                      <Progress
-                        value={calculateOverallInventory(slots)}
-                        className="h-2"
-                      />
+                    <div className="space-y-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium">{calculateOverallInventory(slots)}% Full</span>
+                        <span className="text-muted-foreground">
+                          {slots.reduce((sum, slot) => sum + slot.currentQuantity, 0)} / {slots.reduce((sum, slot) => sum + slot.capacity, 0)} items
+                        </span>
+                      </div>
+                      <Progress value={calculateOverallInventory(slots)} className="h-2" />
                       <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>Empty</span>
-                        <span>Full</span>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          Last Restocked
+                        </span>
+                        <span>{lastRestocked ? formatDate(lastRestocked) : "N/A"}</span>
                       </div>
                     </div>
 
                     <Separator />
 
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-medium">Top Products</h3>
-                      <div className="space-y-3">
-                        {slots.map((slot, index) => (
-                          <div
-                            key={index}
-                            className="flex justify-between items-center"
-                          >
+                    <div className="space-y-2">
+                      {slots.map((slot) => (
+                        <div
+                          key={slot.id}
+                          className="flex items-center gap-3 py-2 border-b last:border-b-0"
+                        >
+                          <div className="w-10 h-10 rounded border bg-muted/20 relative overflow-hidden shrink-0">
+                            {slot.productImage ? (
+                              <div
+                                className="absolute inset-0 bg-cover bg-center"
+                                style={{ backgroundImage: `url(${slot.productImage})` }}
+                              />
+                            ) : (
+                              <Package className="h-5 w-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium truncate">
+                                {slot.productName || (
+                                  <span className="text-muted-foreground italic">Empty</span>
+                                )}
+                              </span>
+                              <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                                {slot.currentQuantity} / {slot.capacity}
+                              </span>
+                            </div>
                             <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                                <Package className="h-4 w-4 text-primary" />
-                              </div>
-                              <span className="text-sm font-medium">
+                              <span className="text-xs text-muted-foreground w-8 shrink-0">
                                 {slot.labelCode}
                               </span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <span className="text-sm text-muted-foreground">
-                                {Math.round(
-                                  (slot.currentQuantity / slot.capacity) * 100
-                                )}
-                                % full
-                              </span>
-                              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                              <Progress
+                                value={Math.round((slot.currentQuantity / slot.capacity) * 100)}
+                                className="h-1.5 flex-1"
+                              />
                             </div>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

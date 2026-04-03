@@ -1,7 +1,7 @@
 {
   // Next.js will no longer try to modify this section
   "compilerOptions": {
-    "target": "ES2017",
+    "target": "ES2018",
     "lib": [
       "dom",
       "dom.iterable",

@@ -1,17 +1,20 @@
 "use server"
 
 import { db } from "@/infrastructure/database"
-import { GetOrgProductDataMetrics } from "@/domains/Product/use-cases/GetOrgProductDataMetrics"
-import { ProductUseCase } from "@/domains/Product/use-cases/ProductUseCase"
 import { Product } from "@/domains/Product/entities/Product"
-import { DrizzleProductRepository } from "@/infrastructure/repositories/DrizzleProductRepository"
+import { ProductRepository } from "@/infrastructure/repositories/ProductRepository"
+import * as ProductService from "@/domains/Product/ProductService"
+import { generateProductAliases } from "@/lib/generateProductAliases"
+import { auth } from "@/lib/auth"
 
-export async function getOrgProductDataMetrics(organizationId: string) {
+export async function getOrgProductDataMetrics() {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
   try {
-    const productRepo = new DrizzleProductRepository(db)
-    const getOrgProductDataMetrics = new GetOrgProductDataMetrics(productRepo)
-
-    return await getOrgProductDataMetrics.execute(organizationId)
+    const repo = new ProductRepository(db)
+    return await ProductService.getOrgProductDataMetrics(repo, organizationId)
   } catch (error) {
     console.error("Failed to fetch product data metrics:", error)
     throw new Error("Failed to fetch product data metrics")
@@ -24,32 +27,36 @@ export async function createProduct(formData: {
   category: string
   image: string
   vendorLink: string
+  vendorSku?: string
   caseCost: number
   caseSize: number
   shippingAvailable: boolean
 }) {
-  try {
-    const productRepo = new DrizzleProductRepository(db)
-    const productUseCase = new ProductUseCase(productRepo)
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
 
-    const newProduct = new Product({
-      id: crypto.randomUUID(), // Generate a new UUID
+  try {
+    const repo = new ProductRepository(db)
+    const aliases = await generateProductAliases(formData.name)
+    const product = new Product({
+      id: crypto.randomUUID(),
       name: formData.name,
       recommendedPrice: formData.recommendedPrice,
       category: formData.category,
       image: formData.image,
       vendorLink: formData.vendorLink,
+      vendorSku: formData.vendorSku,
       caseCost: formData.caseCost,
       caseSize: formData.caseSize,
       shippingAvailable: formData.shippingAvailable,
-      organizationId: "1", // TODO: Get from session/context
+      aliases,
+      organizationId,
       createdAt: new Date(),
       updatedAt: new Date(),
-      shippingTimeInDays: 0, // Add default value or add to form
+      shippingTimeInDays: 0,
     })
-
-    const createdProduct = await productUseCase.create(newProduct)
-    return createdProduct
+    return await ProductService.createProduct(repo, product)
   } catch (error) {
     console.error("Failed to create product:", error)
     throw new Error("Failed to create product")

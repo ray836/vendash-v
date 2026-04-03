@@ -1,56 +1,38 @@
 "use server"
 
-import { DrizzleProductRepository } from "@/infrastructure/repositories/DrizzleProductRepository"
 import { db } from "@/infrastructure/database"
-import { SaveSlotsUseCase } from "@/domains/Slot/use-cases/SaveSlotsUseCase"
-import { DrizzleSlotRepository } from "@/infrastructure/repositories/DrizzleSlotRepository"
-import { DrizzleVendingMachineRepository } from "@/infrastructure/repositories/DrizzleVendingMachineRepository"
-import { DrizzleLocationRepository } from "@/infrastructure/repositories/DrizzleLocationRepository"
-import { GetMachineWithSlotsUseCase } from "@/domains/VendingMachine/use-cases/GetMachineWithSlotsUseCase"
-import { GetVendingMachineUseCase } from "@/domains/VendingMachine/use-cases/GetVendingMachineUseCase"
-import { UpdateMachineCardReaderUseCase } from "@/domains/VendingMachine/use-cases/UpdateMachineCardReaderUseCase"
-import { PublicVendingMachineDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
+import { ProductRepository } from "@/infrastructure/repositories/ProductRepository"
+import { SlotRepository } from "@/infrastructure/repositories/SlotRepository"
+import { VendingMachineRepository } from "@/infrastructure/repositories/VendingMachineRepository"
+import { LocationRepository } from "@/infrastructure/repositories/LocationRepository"
+import * as VendingMachineService from "@/domains/VendingMachine/VendingMachineService"
+import * as ProductService from "@/domains/Product/ProductService"
+import * as SlotService from "@/domains/Slot/SlotService"
+import * as LocationService from "@/domains/Location/LocationService"
 import { PublicSlotDTO } from "@/domains/Slot/schemas/SlotSchemas"
-import { GetOrgProductsUseCase } from "@/domains/Product/use-cases/GetOrgProducts"
 import { UpdateVendingMachineInfoRequestDTO } from "@/domains/VendingMachine/schemas/UpdateVendingMachineInfoSchemas"
-import { UpdateVendingMachineInfoUseCase } from "@/domains/VendingMachine/use-cases/UpdateVendingMachineInfoUseCase"
-import { GetLocationsUseCase } from "@/domains/Location/use-cases/GetLocationsUseCase"
-
-// get products for machine
+import { auth } from "@/lib/auth"
 
 export async function getOrgProducts() {
-  const orgId = "1"
-  const productRepo = new DrizzleProductRepository(db)
-  // const productUseCase = new ProductUseCase(productRepo)
-  const getOrgProductsUseCase = new GetOrgProductsUseCase(productRepo)
-  const products = await getOrgProductsUseCase.execute(orgId)
-  // const productsWithInventorySalesOrderData =
-  //   await productUseCase.execute(products)
-  // return productsWithInventorySalesOrderData
-  return products
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
+  const productRepo = new ProductRepository(db)
+  return ProductService.getOrgProducts(productRepo, organizationId)
 }
 
-// export async function getSlots(machineId: string) {
-//   const slotRepo = new DrizzleSlotRepository(db)
-//   const slots = await slotRepo.getSlots(machineId)
-//   return slots
-// }
-
 export async function getMachineWithSlots(machineId: string) {
-  const machineRepo = new DrizzleVendingMachineRepository(db)
-  const slotRepo = new DrizzleSlotRepository(db)
-  const locationRepo = new DrizzleLocationRepository(db)
-  const getMachineWithSlotsUseCase = new GetMachineWithSlotsUseCase(
-    machineRepo,
-    slotRepo,
-    locationRepo
-  )
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+
+  const machineRepo = new VendingMachineRepository(db)
+  const slotRepo = new SlotRepository(db)
+  const locationRepo = new LocationRepository(db)
 
   try {
-    const result = await getMachineWithSlotsUseCase.execute(machineId)
-    if (!result) {
-      throw new Error("Machine not found")
-    }
+    const result = await VendingMachineService.getMachineWithSlots(machineRepo, slotRepo, locationRepo, machineId)
+    if (!result) throw new Error("Machine not found")
     console.log("got here result:::", result)
     return result
   } catch (error) {
@@ -59,21 +41,20 @@ export async function getMachineWithSlots(machineId: string) {
   }
 }
 
-export async function saveSlots(
-  machineId: string,
-  slots: PublicSlotDTO[],
-  ccReaderId: string
-) {
+export async function saveSlots(machineId: string, slots: PublicSlotDTO[], ccReaderId: string) {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
   try {
-    const slotRepo = new DrizzleSlotRepository(db)
-    const machineRepo = new DrizzleVendingMachineRepository(db)
-    const saveSlotsUseCase = new SaveSlotsUseCase(slotRepo, machineRepo)
-    await saveSlotsUseCase.execute({
+    const slotRepo = new SlotRepository(db)
+    const machineRepo = new VendingMachineRepository(db)
+    await SlotService.saveSlots(slotRepo, machineRepo, {
       machineId,
       slots,
-      userId: "1",
+      userId: session.user.id,
       ccReaderId,
-      organizationId: "1",
+      organizationId,
     })
     return { success: true }
   } catch (error) {
@@ -83,34 +64,31 @@ export async function saveSlots(
 }
 
 export async function getMachine(machineId: string) {
-  const machineRepo = new DrizzleVendingMachineRepository(db)
-  const getVendingMachineUseCase = new GetVendingMachineUseCase(machineRepo)
-  const machine = await getVendingMachineUseCase.execute(machineId)
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+
+  const machineRepo = new VendingMachineRepository(db)
+  const machine = await VendingMachineService.getMachine(machineRepo, machineId)
   console.log("machineId", machineId)
   console.log("machine:", machine)
   return machine
 }
 
-export async function updateMachine(
-  machineId: string,
-  updates: { cardReaderId?: string }
-) {
+export async function updateMachine(machineId: string, updates: { cardReaderId?: string }) {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+
   try {
-    const machineRepo = new DrizzleVendingMachineRepository(db)
-    const slotRepo = new DrizzleSlotRepository(db)
-    const updateMachineCardReaderUseCase = new UpdateMachineCardReaderUseCase(
+    const machineRepo = new VendingMachineRepository(db)
+    const slotRepo = new SlotRepository(db)
+    const updatedMachine = await VendingMachineService.updateMachineCardReader(
       machineRepo,
-      slotRepo
+      slotRepo,
+      machineId,
+      updates.cardReaderId || "",
+      session.user.id
     )
-
-    const updatedMachine: PublicVendingMachineDTO =
-      await updateMachineCardReaderUseCase.execute(
-        machineId,
-        updates.cardReaderId || "",
-        "1" // userId
-      )
     console.log("updated machine", updatedMachine)
-
     return updatedMachine
   } catch (error) {
     console.error("Failed to update machine:", error)
@@ -118,34 +96,24 @@ export async function updateMachine(
   }
 }
 
-export async function updateMachineInfo(
-  id: string,
-  updateData: UpdateVendingMachineInfoRequestDTO
-) {
+export async function updateMachineInfo(id: string, updateData: UpdateVendingMachineInfoRequestDTO) {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+
   try {
-    const machineRepo = new DrizzleVendingMachineRepository(db)
-    const updateVendingMachineInfoUseCase = new UpdateVendingMachineInfoUseCase(
-      machineRepo
-    )
-    const result = await updateVendingMachineInfoUseCase.execute(id, updateData)
-    return JSON.stringify({
-      success: true,
-      data: result,
-    })
+    const machineRepo = new VendingMachineRepository(db)
+    const result = await VendingMachineService.updateMachineInfo(machineRepo, id, updateData)
+    return JSON.stringify({ success: true, data: result })
   } catch (error) {
-    return JSON.stringify({
-      success: false,
-      error:
-        error instanceof Error ? error.message : "An unknown error occurred",
-      data: null,
-    })
+    return JSON.stringify({ success: false, error: error instanceof Error ? error.message : "An unknown error occurred", data: null })
   }
 }
 
 export async function getLocationsServer() {
-  const repo = new DrizzleLocationRepository(db)
-  const useCase = new GetLocationsUseCase(repo)
-  // Use your actual org ID here
-  const orgId = "1"
-  return await useCase.execute(orgId)
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
+  const locationRepo = new LocationRepository(db)
+  return LocationService.getLocations(locationRepo, organizationId)
 }

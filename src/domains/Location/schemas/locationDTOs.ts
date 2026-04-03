@@ -4,6 +4,8 @@ export const BaseLocationDTO = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   address: z.string().min(1),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
   organizationId: z.string().uuid(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -20,6 +22,8 @@ export const CreateLocationRequestDTO = z.object({
   name: z.string().min(1),
   address: z.string().min(1),
   organizationId: z.string().uuid(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 })
 
 export const UpdateLocationRequestDTO = CreateLocationRequestDTO.partial()
