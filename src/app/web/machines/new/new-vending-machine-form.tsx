@@ -82,6 +82,7 @@ const formSchema = z.object({
   status: z.string({
     required_error: "Please select an initial status.",
   }),
+  cardReaderId: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -201,7 +202,7 @@ export function NewVendingMachineForm() {
         locationId: values.locationId,
         model: values.model,
         notes: values.notes || "",
-        cardReaderId: "1",
+        cardReaderId: values.cardReaderId || undefined,
       })
       const machine = JSON.parse(result)
 
@@ -270,6 +271,23 @@ export function NewVendingMachineForm() {
                       </FormControl>
                       <FormDescription>
                         The model number or name of the machine
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="cardReaderId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ePort Card Reader ID</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. VK1001863385" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The serial number from your Cantaloupe ePort device. You can add this later.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
