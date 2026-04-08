@@ -4,8 +4,8 @@ import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { ArrowLeft, Plus } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
-import { createMachine } from "../actions"
+import { useState, useEffect } from "react"
+import { createMachine, getLocations } from "../actions"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 
@@ -44,24 +44,6 @@ import {
 } from "@/components/ui/dialog"
 import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
 
-// Sample initial locations - in a real app, this would come from your backend
-const initialLocations: Location[] = [
-  {
-    id: "1",
-    name: "Main Building - Floor 1",
-    address: "Main Building, Floor 1",
-  },
-  {
-    id: "2",
-    name: "Science Block - Floor 2",
-    address: "Science Block, Floor 2",
-  },
-  {
-    id: "3",
-    name: "Library - Floor 1",
-    address: "Library, Floor 1",
-  },
-]
 
 const formSchema = z.object({
   machineId: z.string().min(2, {
@@ -178,7 +160,11 @@ function AddLocationDialog({
 export function NewVendingMachineForm() {
   const router = useRouter()
   const { toast } = useToast()
-  const [locations, setLocations] = useState(initialLocations)
+  const [locations, setLocations] = useState<Location[]>([])
+
+  useEffect(() => {
+    getLocations().then(setLocations)
+  }, [])
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),

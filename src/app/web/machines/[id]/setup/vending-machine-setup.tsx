@@ -28,6 +28,7 @@ import {
   getMachine,
   updateMachineInfo,
 } from "./actions"
+import { useToast } from "@/hooks/use-toast"
 import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import {
   Popover,
@@ -439,6 +440,7 @@ export function VendingMachineSetup({
 }: VendingMachineSetupProps) {
   // Initialize all state with basic values
   const [machine, setMachine] = useState<PublicVendingMachineDTO | null>(null)
+  const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [machineType, setMachineType] =
     useState<MachineType>(initialMachineType)
@@ -673,8 +675,8 @@ export function VendingMachineSetup({
         }
       }
     } catch (error) {
-      // Handle error case
       console.error("Failed to save configuration:", error)
+      toast({ title: "Error", description: "Failed to save configuration. Please try again.", variant: "destructive" })
     } finally {
       setIsSaving(false)
     }
@@ -704,13 +706,15 @@ export function VendingMachineSetup({
       const result = await updateMachineInfo(machine!.id, machineInfo)
       const response = JSON.parse(result)
       if (response.success) {
-        // Optionally update local machine state here
+        const updatedMachine = await getMachine(machine!.id)
+        setMachine(updatedMachine)
+        toast({ title: "Saved", description: "Machine info updated successfully." })
       } else {
         throw new Error(response.error || "Failed to update machine info")
       }
     } catch (error) {
-      // Optionally show a toast here
       console.error(error)
+      toast({ title: "Error", description: "Failed to save machine info.", variant: "destructive" })
     } finally {
       setIsSavingInfo(false)
     }

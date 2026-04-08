@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,8 +43,16 @@ export function MachineSettingsDialog({
     notes: machine.notes || "",
     locationId: machine.locationId || "",
   })
-  console.log(locations)
-  console.log("iiiiikkkkkiiaaaa")
+
+  // Sync local state when parent refreshes the machine after a save
+  useEffect(() => {
+    setCardReaderId(machine.cardReaderId || "")
+    setMachineInfo({
+      model: machine.model || "",
+      notes: machine.notes || "",
+      locationId: machine.locationId || "",
+    })
+  }, [machine])
 
   const handleCardReaderUpdate = async (newCardReaderId: string) => {
     try {

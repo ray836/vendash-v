@@ -4,6 +4,7 @@ import { db } from "@/infrastructure/database"
 import { VendingMachineRepository } from "@/infrastructure/repositories/VendingMachineRepository"
 import { LocationRepository } from "@/infrastructure/repositories/LocationRepository"
 import * as VendingMachineService from "@/domains/VendingMachine/VendingMachineService"
+import * as LocationService from "@/domains/Location/LocationService"
 import { MachineStatus, MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
 import { auth } from "@/lib/auth"
 
@@ -54,6 +55,15 @@ export async function updateMachineStatus(id: string, status: MachineStatus) {
   } catch (error) {
     return JSON.stringify({ success: false, error: error instanceof Error ? error.message : "An unknown error occurred", data: null })
   }
+}
+
+export async function getLocations() {
+  const session = await auth()
+  if (!session) throw new Error('Unauthorized')
+  const { organizationId } = session.user
+
+  const locationRepo = new LocationRepository(db)
+  return LocationService.getLocations(locationRepo, organizationId)
 }
 
 export async function deleteMachine(id: string) {
