@@ -1058,7 +1058,7 @@ export function Settings() {
                       </Button>
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">Leave the Password field blank in SeedLive.</p>
+                  <p className="text-xs text-muted-foreground">The API key is embedded in the URL — leave Username and Password blank in SeedLive.</p>
                 </div>
               </div>
 
@@ -1104,7 +1104,7 @@ export function Settings() {
                         { label: "Transport Name", value: "VendorPro" },
                         { label: "Transport Type", value: "HTTP POST" },
                         { label: "URL", value: integrationSettings?.endpointUrl ?? null },
-                        { label: "Username", value: integrationSettings?.apiKey ?? null },
+                        { label: "Username", value: null, placeholder: "leave blank" },
                         { label: "Password", value: null, placeholder: "leave blank" },
                       ].map(({ label, value, placeholder }) => (
                         <div key={label} className="grid grid-cols-2 items-center px-3 py-2">

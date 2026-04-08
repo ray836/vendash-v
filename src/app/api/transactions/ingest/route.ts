@@ -27,17 +27,25 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   // --- Authentication ---
-  const authHeader = request.headers.get('Authorization') ?? ''
-  const match = authHeader.match(/^Basic\s+(.+)$/i)
-  if (!match) {
+  // Accept API key as ?key= query param (preferred for SeedLive URL field)
+  // or as Basic Auth username (fallback)
+  let apiKey = request.nextUrl.searchParams.get('key') ?? ''
+
+  if (!apiKey) {
+    const authHeader = request.headers.get('Authorization') ?? ''
+    const match = authHeader.match(/^Basic\s+(.+)$/i)
+    if (match) {
+      const decoded = Buffer.from(match[1], 'base64').toString('utf-8')
+      apiKey = decoded.split(':')[0]
+    }
+  }
+
+  if (!apiKey) {
     return new NextResponse('Unauthorized', {
       status: 401,
       headers: { 'WWW-Authenticate': 'Basic realm="VendorPro"' },
     })
   }
-
-  const decoded = Buffer.from(match[1], 'base64').toString('utf-8')
-  const apiKey = decoded.split(':')[0]
 
   const [org] = await db
     .select({ id: organizations.id, apiKey: organizations.apiKey })

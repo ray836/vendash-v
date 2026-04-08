@@ -52,7 +52,7 @@ export async function getIntegrationSettings() {
     .limit(5)
 
   return {
-    endpointUrl: `${appUrl}/api/transactions/ingest`,
+    endpointUrl: `${appUrl}/api/transactions/ingest?key=${apiKey}`,
     apiKey,
     logs: recentLogs,
     isLocalhost: appUrl.includes('localhost'),
