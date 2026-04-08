@@ -1040,25 +1040,7 @@ export function Settings() {
                       </Button>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium">API Key (Username)</label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        readOnly
-                        value={integrationSettings?.apiKey ?? 'Loading…'}
-                        className="font-mono text-xs"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={!integrationSettings}
-                        onClick={() => integrationSettings && copyToClipboard(integrationSettings.apiKey, 'key')}
-                      >
-                        {copiedField === 'key' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">The API key is embedded in the URL — leave Username and Password blank in SeedLive.</p>
+                  <p className="text-xs text-muted-foreground">The API key is embedded in the URL. Leave Username and Password blank in SeedLive.</p>
                 </div>
               </div>
 
