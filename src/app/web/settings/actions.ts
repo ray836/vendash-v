@@ -3,7 +3,7 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/infrastructure/database'
 import { organizations, integrationLogs } from '@/infrastructure/database/schema'
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, gt, and } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { nanoid } from 'nanoid'
 
@@ -44,12 +44,16 @@ export async function getIntegrationSettings() {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
   const recentLogs = await db
     .select()
     .from(integrationLogs)
-    .where(eq(integrationLogs.organizationId, session.user.organizationId))
+    .where(and(
+      eq(integrationLogs.organizationId, session.user.organizationId),
+      gt(integrationLogs.createdAt, since)
+    ))
     .orderBy(desc(integrationLogs.createdAt))
-    .limit(5)
+    .limit(20)
 
   return {
     endpointUrl: `${appUrl}/api/transactions/ingest?key=${apiKey}`,
