@@ -20,6 +20,11 @@ const QUEUE_URL = 'https://sqs.us-west-2.amazonaws.com/475191662736/VendashTrans
  *
  * Returns 200 on success, 401 if auth fails, 400 if body is missing.
  */
+// SeedLive sends a GET request to verify the endpoint before POSTing
+export async function GET() {
+  return new NextResponse('VendorPro ingest endpoint ready', { status: 200 })
+}
+
 export async function POST(request: NextRequest) {
   // --- Authentication ---
   const authHeader = request.headers.get('Authorization') ?? ''
