@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/infrastructure/database'
-import { organizations, integrationLogs } from '@/infrastructure/database/schema'
+import { organizations, integrationLogs, vendingMachines } from '@/infrastructure/database/schema'
 import { eq } from 'drizzle-orm'
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs'
 import { nanoid } from 'nanoid'
@@ -50,6 +50,19 @@ export async function POST(request: NextRequest) {
   const body = await request.text()
   if (!body.trim()) {
     return new NextResponse('Empty body', { status: 400 })
+  }
+
+  // --- Resolve org from cardReaderId if not already found via API key ---
+  if (!orgId) {
+    const cardReaderId = body.trim().split(',')[0].replace(/^"|"$/g, '').trim()
+    if (cardReaderId) {
+      const [machine] = await db
+        .select({ organizationId: vendingMachines.organizationId })
+        .from(vendingMachines)
+        .where(eq(vendingMachines.cardReaderId, cardReaderId))
+        .limit(1)
+      if (machine) orgId = machine.organizationId
+    }
   }
 
   // --- Forward to SQS ---
