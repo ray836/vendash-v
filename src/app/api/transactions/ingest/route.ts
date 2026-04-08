@@ -26,11 +26,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  // --- Authentication ---
-  // Accept API key as ?key= query param (preferred for SeedLive URL field)
-  // or as Basic Auth username (fallback)
+  // --- Resolve org for logging (optional — API key in ?key= or Basic Auth) ---
+  let orgId: string | null = null
   let apiKey = request.nextUrl.searchParams.get('key') ?? ''
-
   if (!apiKey) {
     const authHeader = request.headers.get('Authorization') ?? ''
     const match = authHeader.match(/^Basic\s+(.+)$/i)
@@ -39,22 +37,13 @@ export async function POST(request: NextRequest) {
       apiKey = decoded.split(':')[0]
     }
   }
-
-  if (!apiKey) {
-    return new NextResponse('Unauthorized', {
-      status: 401,
-      headers: { 'WWW-Authenticate': 'Basic realm="VendorPro"' },
-    })
-  }
-
-  const [org] = await db
-    .select({ id: organizations.id, apiKey: organizations.apiKey })
-    .from(organizations)
-    .where(eq(organizations.apiKey, apiKey))
-    .limit(1)
-
-  if (!org) {
-    return new NextResponse('Unauthorized', { status: 401 })
+  if (apiKey) {
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.apiKey, apiKey))
+      .limit(1)
+    if (org) orgId = org.id
   }
 
   // --- Validate body ---
@@ -83,26 +72,30 @@ export async function POST(request: NextRequest) {
       MessageBody: body.trim(),
     }))
 
-    await db.insert(integrationLogs).values({
-      id: nanoid(),
-      organizationId: org.id,
-      source: 'cantaloupe',
-      status: 'success',
-      message: null,
-    })
+    if (orgId) {
+      await db.insert(integrationLogs).values({
+        id: nanoid(),
+        organizationId: orgId,
+        source: 'cantaloupe',
+        status: 'success',
+        message: null,
+      }).catch(() => {/* non-fatal */})
+    }
 
     return new NextResponse('OK', { status: 200 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error('[transactions/ingest] Failed to send to SQS:', error)
 
-    await db.insert(integrationLogs).values({
-      id: nanoid(),
-      organizationId: org.id,
-      source: 'cantaloupe',
-      status: 'error',
-      message,
-    }).catch(() => {/* non-fatal */})
+    if (orgId) {
+      await db.insert(integrationLogs).values({
+        id: nanoid(),
+        organizationId: orgId,
+        source: 'cantaloupe',
+        status: 'error',
+        message,
+      }).catch(() => {/* non-fatal */})
+    }
 
     return new NextResponse('Internal Server Error', { status: 500 })
   }
