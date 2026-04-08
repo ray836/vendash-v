@@ -14,8 +14,11 @@ import {
   Save,
   Trash2,
   Building2,
+  Plug,
+  Copy,
+  Check,
 } from "lucide-react"
-import { getOrganization, updateOrganization } from "./actions"
+import { getOrganization, updateOrganization, getIntegrationSettings } from "./actions"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -102,12 +105,25 @@ export function Settings() {
   const [orgSuccess, setOrgSuccess] = useState(false)
   const [isPending, startTransition] = useTransition()
 
+  type IntegrationLog = { id: string; status: string; message: string | null; createdAt: Date; source: string }
+  const [integrationSettings, setIntegrationSettings] = useState<{ endpointUrl: string; apiKey: string; logs: IntegrationLog[]; isLocalhost: boolean } | null>(null)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+
   useEffect(() => {
     getOrganization().then((org) => {
       if (org) setOrgForm({ name: org.name, address: org.address ?? '' })
       setOrgLoaded(true)
     })
+    getIntegrationSettings().then((s) => {
+      if (s) setIntegrationSettings(s)
+    })
   }, [])
+
+  function copyToClipboard(text: string, field: string) {
+    navigator.clipboard.writeText(text)
+    setCopiedField(field)
+    setTimeout(() => setCopiedField(null), 2000)
+  }
 
   function handleOrgSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -134,7 +150,7 @@ export function Settings() {
       </div>
 
       <Tabs defaultValue="account" className="space-y-4">
-        <TabsList className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 w-full">
+        <TabsList className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-7 w-full">
           <TabsTrigger value="account" className="flex items-center gap-2">
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Account</span>
@@ -161,6 +177,10 @@ export function Settings() {
           <TabsTrigger value="organization" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Organization</span>
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="flex items-center gap-2">
+            <Plug className="h-4 w-4" />
+            <span className="hidden sm:inline">Integrations</span>
           </TabsTrigger>
         </TabsList>
 
@@ -937,6 +957,222 @@ export function Settings() {
             </form>
           </Card>
         </TabsContent>
+        {/* Integrations */}
+        <TabsContent value="integrations">
+          <Card>
+            <CardHeader>
+              <CardTitle>Device Integrations</CardTitle>
+              <CardDescription>
+                Connect your Cantaloupe ePort card readers to automatically sync transaction data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+
+              {/* Localhost warning */}
+              {integrationSettings?.isLocalhost && (
+                <div className="flex gap-3 p-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 text-sm">
+                  <span className="text-amber-600 dark:text-amber-400 font-medium">⚠ Local development detected</span>
+                  <span className="text-amber-700 dark:text-amber-300">The endpoint URL uses localhost and is not reachable by SeedLive. Deploy to Vercel and set <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 rounded">NEXT_PUBLIC_APP_URL</code> to your production URL.</span>
+                </div>
+              )}
+
+              {/* Integration status */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-medium">Connection Status</h3>
+                {!integrationSettings ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : integrationSettings.logs.length === 0 ? (
+                  <div className="flex items-center gap-3 p-3 rounded-md border bg-muted/40">
+                    <div className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium">No transactions received yet</p>
+                      <p className="text-xs text-muted-foreground">Once SeedLive is configured and sends its first transaction, the status will appear here.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {integrationSettings.logs.map((log) => (
+                      <div key={log.id} className={`flex items-start gap-3 p-3 rounded-md border text-sm ${log.status === 'success' ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
+                        <div className={`mt-0.5 h-2.5 w-2.5 rounded-full flex-shrink-0 ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`font-medium capitalize ${log.status === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                              {log.status === 'success' ? 'Transaction received successfully' : 'Transaction failed'}
+                            </span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">
+                              {new Date(log.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          {log.message && (
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-0.5 truncate">{log.message}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Connection credentials */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Your Connection Details</h3>
+                <p className="text-sm text-muted-foreground">
+                  Use these values when configuring the HTTP POST transport in SeedLive.
+                </p>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Endpoint URL</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        readOnly
+                        value={integrationSettings?.endpointUrl ?? 'Loading…'}
+                        className="font-mono text-xs"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!integrationSettings}
+                        onClick={() => integrationSettings && copyToClipboard(integrationSettings.endpointUrl, 'url')}
+                      >
+                        {copiedField === 'url' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">API Key (Username)</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        readOnly
+                        value={integrationSettings?.apiKey ?? 'Loading…'}
+                        className="font-mono text-xs"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!integrationSettings}
+                        onClick={() => integrationSettings && copyToClipboard(integrationSettings.apiKey, 'key')}
+                      >
+                        {copiedField === 'key' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Leave the Password field blank in SeedLive.</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Step-by-step guide */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-medium">Cantaloupe ePort Setup Guide</h3>
+                <p className="text-sm text-muted-foreground">
+                  Follow these steps to connect your ePort devices to VendorPro via the SeedLive portal.
+                </p>
+
+                {/* Step 1 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">1</div>
+                  <div className="space-y-1 pt-1">
+                    <p className="font-medium">Map each ePort device to a machine</p>
+                    <p className="text-sm text-muted-foreground">
+                      In VendorPro, go to <span className="font-medium text-foreground">Machines → Edit Machine</span> and enter the ePort device serial number in the <span className="font-medium text-foreground">Card Reader ID</span> field. This links transactions from that reader to the correct machine.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">2</div>
+                  <div className="space-y-1 pt-1">
+                    <p className="font-medium">Open SeedLive and go to Report Register</p>
+                    <p className="text-sm text-muted-foreground">
+                      Log in at <a href="https://www.seedlive.com" target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-2">seedlive.com</a>, then navigate to <span className="font-medium text-foreground">Reports → Report Register</span> and click <span className="font-medium text-foreground">Add Transport</span>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 3 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">3</div>
+                  <div className="space-y-1 pt-1">
+                    <p className="font-medium">Configure the HTTP POST transport</p>
+                    <p className="text-sm text-muted-foreground mb-2">Fill in the following fields:</p>
+                    <div className="rounded-md border divide-y text-sm">
+                      {[
+                        { label: "Transport Name", value: "VendorPro" },
+                        { label: "Transport Type", value: "HTTP POST" },
+                        { label: "URL", value: integrationSettings?.endpointUrl ?? null },
+                        { label: "Username", value: integrationSettings?.apiKey ?? null },
+                        { label: "Password", value: null, placeholder: "leave blank" },
+                      ].map(({ label, value, placeholder }) => (
+                        <div key={label} className="grid grid-cols-2 items-center px-3 py-2">
+                          <span className="text-muted-foreground">{label}</span>
+                          <div className="flex items-center gap-2">
+                            {value ? (
+                              <>
+                                <span className="font-mono text-xs break-all flex-1">{value}</span>
+                                <button
+                                  onClick={() => copyToClipboard(value, `step3-${label}`)}
+                                  className="flex-shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                  title={`Copy ${label}`}
+                                >
+                                  {copiedField === `step3-${label}` ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                                </button>
+                              </>
+                            ) : (
+                              <span className={placeholder ? "text-muted-foreground italic" : "font-medium"}>{placeholder ?? value}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Step 4 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">4</div>
+                  <div className="space-y-1 pt-1">
+                    <p className="font-medium">Test the transport</p>
+                    <p className="text-sm text-muted-foreground">
+                      Click <span className="font-medium text-foreground">Test Transport</span>. You should see a success response. Then click <span className="font-medium text-foreground">Add Transport</span> to save it.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 5 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">5</div>
+                  <div className="space-y-1 pt-1">
+                    <p className="font-medium">Create the transaction reports</p>
+                    <p className="text-sm text-muted-foreground">
+                      In the same Report Register screen, click <span className="font-medium text-foreground">Create</span> and configure three reports — each using the VendorPro transport you just created:
+                    </p>
+                    <ul className="mt-2 space-y-1 text-sm text-muted-foreground list-disc list-inside">
+                      <li><span className="font-medium text-foreground">Single Transaction Data Export (CSV)</span></li>
+                      <li><span className="font-medium text-foreground">DEX File</span></li>
+                      <li><span className="font-medium text-foreground">Transaction Line Item Data Export</span></li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Step 6 */}
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">6</div>
+                  <div className="space-y-1 pt-1">
+                    <p className="font-medium">Verify data is flowing</p>
+                    <p className="text-sm text-muted-foreground">
+                      Make a test purchase on any connected machine. Within a few minutes, the transaction should appear on the <span className="font-medium text-foreground">Sales</span> page in VendorPro.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
     </div>
   )

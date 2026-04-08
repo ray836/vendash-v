@@ -63,6 +63,26 @@ export const organizations = pgTable("organizations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   address: text("address"),
+  apiKey: text("api_key"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+})
+
+export const integrationLogs = pgTable("integration_logs", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  source: text("source").notNull(), // e.g. 'cantaloupe'
+  status: text("status").notNull(), // 'success' | 'error'
+  message: text("message"), // error detail if failed
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+})
+
+export const invitations = pgTable("invitations", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  role: text("role").notNull(),
+  clerkInvitationId: text("clerk_invitation_id"),
+  status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 

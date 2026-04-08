@@ -1,22 +1,45 @@
-import { auth as clerkAuth } from '@clerk/nextjs/server'
+import { auth as clerkAuth, currentUser } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { db } from '@/infrastructure/database'
-import { users } from '@/infrastructure/database/schema'
-import { eq } from 'drizzle-orm'
-import { createOrganization } from './actions'
+import { users, invitations } from '@/infrastructure/database/schema'
+import { eq, and } from 'drizzle-orm'
+import { createOrganization, acceptInvitation } from './actions'
 
 export default async function OnboardingPage() {
   const { userId: clerkId } = await clerkAuth()
   if (!clerkId) redirect('/sign-in')
 
   // Already onboarded? Go straight to dashboard
-  const existing = await db
-    .select()
-    .from(users)
-    .where(eq(users.clerkId, clerkId))
-    .limit(1)
-
+  const existing = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1)
   if (existing[0]) redirect('/web/dashboard')
+
+  const clerkUser = await currentUser()
+  if (!clerkUser) redirect('/sign-in')
+
+  const primaryEmail = clerkUser.emailAddresses.find(
+    (e) => e.id === clerkUser.primaryEmailAddressId
+  )?.emailAddress
+
+  // Check our invitations table — works for any sign-up method (email or OAuth)
+  console.log('[Onboarding] Checking invitation for email:', primaryEmail)
+  if (primaryEmail) {
+    const pending = await db
+      .select()
+      .from(invitations)
+      .where(and(eq(invitations.email, primaryEmail), eq(invitations.status, 'pending')))
+      .limit(1)
+
+    console.log('[Onboarding] Pending invitation found:', pending[0] ?? 'none')
+
+    if (pending[0]) {
+      await acceptInvitation(clerkId, clerkUser, pending[0].organizationId, pending[0].role)
+      await db
+        .update(invitations)
+        .set({ status: 'accepted' })
+        .where(eq(invitations.id, pending[0].id))
+      redirect('/web/dashboard?welcome=1')
+    }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

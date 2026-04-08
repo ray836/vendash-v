@@ -7,6 +7,8 @@ import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { redirect } from 'next/navigation'
 
+type ClerkUser = NonNullable<Awaited<ReturnType<typeof currentUser>>>
+
 export async function createOrganization(formData: FormData) {
   const { userId: clerkId } = await clerkAuth()
   if (!clerkId) redirect('/sign-in')
@@ -63,4 +65,28 @@ export async function createOrganization(formData: FormData) {
   })
 
   redirect('/web/dashboard')
+}
+
+export async function acceptInvitation(
+  clerkId: string,
+  clerkUser: ClerkUser,
+  organizationId: string,
+  role: string
+) {
+  const primaryEmail = clerkUser.emailAddresses.find(
+    (e) => e.id === clerkUser.primaryEmailAddressId
+  )
+  if (!primaryEmail) throw new Error('No primary email found')
+
+  await db.insert(users).values({
+    id: nanoid(),
+    clerkId,
+    firstName: clerkUser.firstName ?? '',
+    lastName: clerkUser.lastName ?? '',
+    email: primaryEmail.emailAddress,
+    password: null,
+    role,
+    organizationId,
+    createdAt: new Date(),
+  })
 }

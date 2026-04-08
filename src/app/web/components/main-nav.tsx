@@ -13,6 +13,7 @@ import {
   DollarSign,
   ClipboardList,
   MapPin,
+  Users,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -66,6 +67,12 @@ const navItems = [
     href: "/web/prekits",
     icon: ClipboardList,
     roles: ALL_ROLES,
+  },
+  {
+    title: "Team",
+    href: "/web/users",
+    icon: Users,
+    roles: [UserRole.ADMIN],
   },
   {
     title: "Settings",

@@ -175,6 +175,7 @@ export function AssignDriverDialog({
                       <div className="flex items-center gap-2">
                         <User className="h-3 w-3" />
                         <span>{driver.firstName} {driver.lastName}</span>
+                        <span className="text-xs text-muted-foreground capitalize">{driver.role}</span>
                       </div>
                       {driver.status === "busy" && (
                         <Badge variant="secondary" className="ml-2">Busy</Badge>

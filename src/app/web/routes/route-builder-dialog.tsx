@@ -476,7 +476,8 @@ export function RouteBuilderDialog({
                       <SelectItem value="unassigned">Unassigned</SelectItem>
                       {drivers.map((driver) => (
                         <SelectItem key={driver.id} value={driver.id}>
-                          {driver.firstName} {driver.lastName}
+                          <span>{driver.firstName} {driver.lastName}</span>
+                          <span className="ml-2 text-xs text-muted-foreground capitalize">{driver.role}</span>
                         </SelectItem>
                       ))}
                       {drivers.length === 0 && (

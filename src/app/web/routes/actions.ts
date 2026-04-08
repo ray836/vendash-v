@@ -105,12 +105,12 @@ export async function getDrivers() {
   try {
     const { db } = await import("@/infrastructure/database")
     const { users } = await import("@/infrastructure/database/schema")
-    const { eq, and } = await import("drizzle-orm")
+    const { eq } = await import("drizzle-orm")
 
     const drivers = await db
-      .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email })
+      .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email, role: users.role })
       .from(users)
-      .where(and(eq(users.organizationId, organizationId), eq(users.role, "driver")))
+      .where(eq(users.organizationId, organizationId))
 
     const driversWithStatus = drivers.map((driver) => ({ ...driver, status: "available" }))
     return { success: true, data: driversWithStatus }

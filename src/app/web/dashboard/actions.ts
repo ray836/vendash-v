@@ -208,3 +208,15 @@ export async function getTransactionGraphData(groupedBy: string) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 }
+
+export async function updateCurrentUserName(firstName: string, lastName: string) {
+  const { auth } = await import("@/lib/auth")
+  const { users } = await import("@/infrastructure/database/schema")
+  const { eq } = await import("drizzle-orm")
+
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  await db.update(users).set({ firstName, lastName }).where(eq(users.id, session.user.id))
+  return { success: true }
+}

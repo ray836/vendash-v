@@ -24,15 +24,14 @@ export async function OPTIONS(request: NextRequest) {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { driverId: string } }
+  { params }: { params: Promise<{ driverId: string }> }
 ) {
   const user = await getApiUser()
   if (!user) return unauthorizedResponse()
 
   try {
-    console.log('[Driver API] Request received for driver:', params.driverId);
-
-    const { driverId } = params;
+    const { driverId } = await params;
+    console.log('[Driver API] Request received for driver:', driverId);
 
     if (!driverId) {
       return NextResponse.json(

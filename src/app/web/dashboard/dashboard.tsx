@@ -18,6 +18,15 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Card,
   CardContent,
@@ -36,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getTransactionGraphData, getDashboardData } from "./actions"
+import { getTransactionGraphData, getDashboardData, updateCurrentUserName } from "./actions"
 import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
 import { formatDateLabel, formatWeekRangeLabel } from "@/utils/date"
 import { useRole } from "@/lib/role-context"
@@ -198,7 +207,7 @@ function ActivityIcon({ type }: { type: string }) {
 
 type DashboardStats = Awaited<ReturnType<typeof getDashboardData>>
 
-export function Dashboard() {
+export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) {
   const { role } = useRole()
   const router = useRouter()
   const [salesPeriod, setSalesPeriod] = useState<GroupByType>(GroupByType.DAY)
@@ -208,14 +217,10 @@ export function Dashboard() {
   const [averageSales, setAverageSales] = useState(0)
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
-
-  useEffect(() => {
-    if (role === UserRole.DRIVER) {
-      router.replace("/web/routes")
-    }
-  }, [role, router])
-
-  if (role === UserRole.DRIVER) return null
+  const [showWelcome, setShowWelcome] = useState(isFirstLogin)
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [isSavingName, setIsSavingName] = useState(false)
 
   const loadStats = () => {
     setStatsLoading(true)
@@ -237,12 +242,71 @@ export function Dashboard() {
       .finally(() => setLoading(false))
   }
 
+  // All hooks must be called unconditionally before any early return
+  useEffect(() => {
+    if (role === UserRole.DRIVER) {
+      router.replace("/web/routes")
+    }
+  }, [role, router])
+
   useEffect(() => { loadStats() }, [])
 
   useEffect(() => { loadChart(salesPeriod) }, [salesPeriod])
 
+  const handleWelcomeSubmit = async () => {
+    if (!firstName.trim()) return
+    setIsSavingName(true)
+    try {
+      await updateCurrentUserName(firstName.trim(), lastName.trim())
+      router.replace("/web/dashboard") // strip ?welcome=1
+    } finally {
+      setIsSavingName(false)
+      setShowWelcome(false)
+    }
+  }
+
+  if (role === UserRole.DRIVER) return null
+
   return (
     <div className="space-y-6">
+      <Dialog open={showWelcome} onOpenChange={setShowWelcome}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Welcome to VendorPro!</DialogTitle>
+            <DialogDescription>
+              You&apos;ve been added to the team. Let&apos;s quickly set up your profile so your teammates know who you are.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">First name <span className="text-destructive">*</span></label>
+              <Input
+                placeholder="Kyle"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleWelcomeSubmit()}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Last name</label>
+              <Input
+                placeholder="Johnson"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleWelcomeSubmit()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowWelcome(false)}>Skip</Button>
+            <Button onClick={handleWelcomeSubmit} disabled={!firstName.trim() || isSavingName}>
+              {isSavingName ? "Saving…" : "Get started"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Dashboard</h1>

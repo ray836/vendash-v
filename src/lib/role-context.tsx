@@ -9,25 +9,48 @@ interface RoleContextValue {
 }
 
 const RoleContext = createContext<RoleContextValue>({
-  role: UserRole.ADMIN,
+  role: UserRole.OPERATOR,
   setRole: () => {},
 })
 
-const STORAGE_KEY = "dev_role_override"
+const DEV_OVERRIDE_KEY = "dev_role_override"
 
-export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRoleState] = useState<UserRole>(UserRole.ADMIN)
+export function RoleProvider({
+  children,
+  initialRole,
+}: {
+  children: React.ReactNode
+  initialRole?: UserRole
+}) {
+  const [role, setRoleState] = useState<UserRole>(initialRole ?? UserRole.OPERATOR)
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as UserRole | null
-    if (stored && Object.values(UserRole).includes(stored)) {
-      setRoleState(stored)
+    // In development, allow localStorage override for testing
+    if (process.env.NODE_ENV === "development") {
+      const stored = localStorage.getItem(DEV_OVERRIDE_KEY) as UserRole | null
+      if (stored && Object.values(UserRole).includes(stored)) {
+        setRoleState(stored)
+        return
+      }
     }
+
+    // Sync with server role (handles session changes)
+    fetch("/api/me")
+      .then((res) => res.json())
+      .then((data) => {
+        const serverRole = data?.user?.role as UserRole | undefined
+        if (serverRole && Object.values(UserRole).includes(serverRole)) {
+          setRoleState(serverRole)
+        }
+      })
+      .catch(() => {/* silently fail */})
   }, [])
 
   function setRole(newRole: UserRole) {
     setRoleState(newRole)
-    localStorage.setItem(STORAGE_KEY, newRole)
+    if (process.env.NODE_ENV === "development") {
+      localStorage.setItem(DEV_OVERRIDE_KEY, newRole)
+    }
   }
 
   return (
