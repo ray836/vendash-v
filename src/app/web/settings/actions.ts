@@ -66,6 +66,25 @@ export async function getIntegrationSettings() {
   }
 }
 
+export async function getIntegrationLogs() {
+  const session = await auth()
+  if (!session) return null
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  return db
+    .select()
+    .from(integrationLogs)
+    .where(and(
+      or(
+        eq(integrationLogs.organizationId, session.user.organizationId),
+        isNull(integrationLogs.organizationId)
+      ),
+      gt(integrationLogs.createdAt, since)
+    ))
+    .orderBy(desc(integrationLogs.createdAt))
+    .limit(20)
+}
+
 export async function updateOrganization(formData: FormData) {
   const session = await auth()
   if (!session) throw new Error('Unauthorized')

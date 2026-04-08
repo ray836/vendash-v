@@ -18,7 +18,7 @@ import {
   Copy,
   Check,
 } from "lucide-react"
-import { getOrganization, updateOrganization, getIntegrationSettings } from "./actions"
+import { getOrganization, updateOrganization, getIntegrationSettings, getIntegrationLogs } from "./actions"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -105,7 +105,7 @@ export function Settings() {
   const [orgSuccess, setOrgSuccess] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  type IntegrationLog = { id: string; status: string; message: string | null; createdAt: Date; source: string }
+  type IntegrationLog = { id: string; status: string; message: string | null; createdAt: Date; source: string; cardReaderId: string | null }
   const [integrationSettings, setIntegrationSettings] = useState<{ endpointUrl: string; apiKey: string; logs: IntegrationLog[]; isLocalhost: boolean } | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
@@ -117,6 +117,14 @@ export function Settings() {
     getIntegrationSettings().then((s) => {
       if (s) setIntegrationSettings(s)
     })
+  }, [])
+
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const logs = await getIntegrationLogs()
+      if (logs) setIntegrationSettings(prev => prev ? { ...prev, logs } : prev)
+    }, 20_000)
+    return () => clearInterval(id)
   }, [])
 
   function copyToClipboard(text: string, field: string) {
@@ -978,7 +986,13 @@ export function Settings() {
 
               {/* Integration status */}
               <div className="space-y-3">
-                <h3 className="text-lg font-medium">Connection Status</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-medium">Connection Status</h3>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                    Live
+                  </span>
+                </div>
                 {!integrationSettings ? (
                   <p className="text-sm text-muted-foreground">Loading…</p>
                 ) : integrationSettings.logs.length === 0 ? (
