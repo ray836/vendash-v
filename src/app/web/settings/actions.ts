@@ -3,7 +3,7 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/infrastructure/database'
 import { organizations, integrationLogs } from '@/infrastructure/database/schema'
-import { eq, desc, gt, and } from 'drizzle-orm'
+import { eq, desc, gt, and, or, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { nanoid } from 'nanoid'
 
@@ -49,7 +49,10 @@ export async function getIntegrationSettings() {
     .select()
     .from(integrationLogs)
     .where(and(
-      eq(integrationLogs.organizationId, session.user.organizationId),
+      or(
+        eq(integrationLogs.organizationId, session.user.organizationId),
+        isNull(integrationLogs.organizationId)
+      ),
       gt(integrationLogs.createdAt, since)
     ))
     .orderBy(desc(integrationLogs.createdAt))

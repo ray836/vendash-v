@@ -69,7 +69,7 @@ export const organizations = pgTable("organizations", {
 
 export const integrationLogs = pgTable("integration_logs", {
   id: text("id").primaryKey(),
-  organizationId: text("organization_id").notNull().references(() => organizations.id),
+  organizationId: text("organization_id").references(() => organizations.id),
   source: text("source").notNull(), // e.g. 'cantaloupe'
   status: text("status").notNull(), // 'success' | 'error'
   message: text("message"), // error detail if failed

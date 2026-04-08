@@ -85,30 +85,26 @@ export async function POST(request: NextRequest) {
       MessageBody: body.trim(),
     }))
 
-    if (orgId) {
-      await db.insert(integrationLogs).values({
-        id: nanoid(),
-        organizationId: orgId,
-        source: 'cantaloupe',
-        status: 'success',
-        message: null,
-      }).catch(() => {/* non-fatal */})
-    }
+    await db.insert(integrationLogs).values({
+      id: nanoid(),
+      organizationId: orgId,
+      source: 'cantaloupe',
+      status: 'success',
+      message: null,
+    }).catch(() => {/* non-fatal */})
 
     return new NextResponse('OK', { status: 200 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error('[transactions/ingest] Failed to send to SQS:', error)
 
-    if (orgId) {
-      await db.insert(integrationLogs).values({
-        id: nanoid(),
-        organizationId: orgId,
-        source: 'cantaloupe',
-        status: 'error',
-        message,
-      }).catch(() => {/* non-fatal */})
-    }
+    await db.insert(integrationLogs).values({
+      id: nanoid(),
+      organizationId: orgId,
+      source: 'cantaloupe',
+      status: 'error',
+      message,
+    }).catch(() => {/* non-fatal */})
 
     return new NextResponse('Internal Server Error', { status: 500 })
   }
