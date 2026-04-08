@@ -996,8 +996,10 @@ export function Settings() {
                         <div className={`mt-0.5 h-2.5 w-2.5 rounded-full flex-shrink-0 ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <span className={`font-medium capitalize ${log.status === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                              {log.status === 'success' ? 'Transaction received successfully' : 'Transaction failed'}
+                            <span className={`font-medium ${log.status === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                              {log.status === 'success'
+                                ? (log.cardReaderId ? `Transaction from device ${log.cardReaderId}` : 'Connection test successful')
+                                : (log.cardReaderId ? `Transaction failed from device ${log.cardReaderId}` : 'Connection test failed')}
                             </span>
                             <span className="text-xs text-muted-foreground flex-shrink-0">
                               {new Date(log.createdAt).toLocaleString()}

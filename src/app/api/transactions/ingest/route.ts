@@ -52,17 +52,16 @@ export async function POST(request: NextRequest) {
     return new NextResponse('Empty body', { status: 400 })
   }
 
-  // --- Resolve org from cardReaderId if not already found via API key ---
-  if (!orgId) {
-    const cardReaderId = body.trim().split(',')[0].replace(/^"|"$/g, '').trim()
-    if (cardReaderId) {
-      const [machine] = await db
-        .select({ organizationId: vendingMachines.organizationId })
-        .from(vendingMachines)
-        .where(eq(vendingMachines.cardReaderId, cardReaderId))
-        .limit(1)
-      if (machine) orgId = machine.organizationId
-    }
+  // --- Parse cardReaderId and resolve org ---
+  const cardReaderId = body.trim().split(',')[0].replace(/^"|"$/g, '').trim() || null
+
+  if (!orgId && cardReaderId) {
+    const [machine] = await db
+      .select({ organizationId: vendingMachines.organizationId })
+      .from(vendingMachines)
+      .where(eq(vendingMachines.cardReaderId, cardReaderId))
+      .limit(1)
+    if (machine) orgId = machine.organizationId
   }
 
   // --- Forward to SQS ---
@@ -91,6 +90,7 @@ export async function POST(request: NextRequest) {
       source: 'cantaloupe',
       status: 'success',
       message: null,
+      cardReaderId,
     }).catch(() => {/* non-fatal */})
 
     return new NextResponse('OK', { status: 200 })
@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
       source: 'cantaloupe',
       status: 'error',
       message,
+      cardReaderId,
     }).catch(() => {/* non-fatal */})
 
     return new NextResponse('Internal Server Error', { status: 500 })

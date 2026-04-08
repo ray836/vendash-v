@@ -73,6 +73,7 @@ export const integrationLogs = pgTable("integration_logs", {
   source: text("source").notNull(), // e.g. 'cantaloupe'
   status: text("status").notNull(), // 'success' | 'error'
   message: text("message"), // error detail if failed
+  cardReaderId: text("card_reader_id"), // populated for real device transactions
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 
