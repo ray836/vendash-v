@@ -53,7 +53,8 @@ export async function getIntegrationSettings() {
         eq(integrationLogs.organizationId, session.user.organizationId),
         isNull(integrationLogs.organizationId)
       ),
-      gt(integrationLogs.createdAt, since)
+      gt(integrationLogs.createdAt, since),
+      isNull(integrationLogs.cardReaderId)
     ))
     .orderBy(desc(integrationLogs.createdAt))
     .limit(20)
@@ -79,7 +80,8 @@ export async function getIntegrationLogs() {
         eq(integrationLogs.organizationId, session.user.organizationId),
         isNull(integrationLogs.organizationId)
       ),
-      gt(integrationLogs.createdAt, since)
+      gt(integrationLogs.createdAt, since),
+      isNull(integrationLogs.cardReaderId)
     ))
     .orderBy(desc(integrationLogs.createdAt))
     .limit(20)

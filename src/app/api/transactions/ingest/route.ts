@@ -52,10 +52,15 @@ export async function POST(request: NextRequest) {
     return new NextResponse('Empty body', { status: 400 })
   }
 
-  // --- Parse cardReaderId and resolve org ---
-  const cardReaderId = body.trim().split(',')[0].replace(/^"|"$/g, '').trim() || null
+  // --- Detect SeedLive connection test (fixed test body, not a real transaction) ---
+  const isConnectionTest = body.trim().toLowerCase().startsWith('this is a test')
 
-  if (!orgId && cardReaderId) {
+  // --- Parse cardReaderId and resolve org (only for real transactions) ---
+  const cardReaderId = isConnectionTest
+    ? null
+    : (body.trim().split(',')[0].replace(/^"|"$/g, '').trim() || null)
+
+  if (!isConnectionTest && !orgId && cardReaderId) {
     const [machine] = await db
       .select({ organizationId: vendingMachines.organizationId })
       .from(vendingMachines)
@@ -64,7 +69,20 @@ export async function POST(request: NextRequest) {
     if (machine) orgId = machine.organizationId
   }
 
-  // --- Forward to SQS ---
+  // --- Connection test: log and return immediately, skip SQS ---
+  if (isConnectionTest) {
+    await db.insert(integrationLogs).values({
+      id: nanoid(),
+      organizationId: orgId,
+      source: 'cantaloupe',
+      status: 'success',
+      message: null,
+      cardReaderId: null,
+    }).catch(() => {/* non-fatal */})
+    return new NextResponse('OK', { status: 200 })
+  }
+
+  // --- Forward real transaction to SQS ---
   if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
     console.error('[transactions/ingest] AWS credentials not configured')
     return new NextResponse('Service unavailable', { status: 503 })
@@ -83,15 +101,6 @@ export async function POST(request: NextRequest) {
       QueueUrl: QUEUE_URL,
       MessageBody: body.trim(),
     }))
-
-    await db.insert(integrationLogs).values({
-      id: nanoid(),
-      organizationId: orgId,
-      source: 'cantaloupe',
-      status: 'success',
-      message: null,
-      cardReaderId,
-    }).catch(() => {/* non-fatal */})
 
     return new NextResponse('OK', { status: 200 })
   } catch (error) {
