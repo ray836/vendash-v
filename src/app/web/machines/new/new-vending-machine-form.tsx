@@ -203,15 +203,14 @@ export function NewVendingMachineForm() {
         notes: values.notes || "",
         cardReaderId: "1",
       })
-      console.log(result)
+      const machine = JSON.parse(result)
 
       toast({
         title: "Success",
         description: "Vending machine created successfully",
       })
 
-      // Redirect to the machines list or the new machine's details
-      router.push("/web/machines")
+      router.push(`/web/machines/${machine.id}/setup`)
     } catch (error) {
       console.error("Failed to create machine:", error)
       toast({
