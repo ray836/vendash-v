@@ -408,14 +408,7 @@ export function NewVendingMachineForm() {
                 )}
               />
 
-              <div className="flex justify-end space-x-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => form.reset()}
-                >
-                  Reset
-                </Button>
+              <div className="flex justify-end">
                 <Button type="submit">Create Machine</Button>
               </div>
             </form>
