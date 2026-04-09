@@ -211,11 +211,11 @@ export function NewVendingMachineForm() {
   return (
     <div className="max-w-2xl mx-auto">
       <Link
-        href="/web/dashboard"
+        href="/web/machines"
         className="flex items-center text-sm text-muted-foreground hover:text-primary mb-6"
       >
         <ArrowLeft className="h-4 w-4 mr-1" />
-        Back to Dashboard
+        Back to Machines
       </Link>
 
       <Card>
