@@ -408,7 +408,8 @@ export function NewVendingMachineForm() {
                 )}
               />
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-3">
+                <Button type="button" variant="outline" onClick={() => router.push('/web/machines')}>Cancel</Button>
                 <Button type="submit">Create Machine</Button>
               </div>
             </form>
