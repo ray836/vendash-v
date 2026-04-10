@@ -12,6 +12,7 @@ import {
   Loader2,
   X,
   AlertTriangle,
+  Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -44,6 +45,7 @@ import {
   updatePreKitItems,
   getMachineTransactions,
 } from "./actions"
+import { deleteMachine } from "../actions"
 import { MachineDetailDataDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
 import { PublicSlotDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
@@ -248,6 +250,15 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
     router.push(`/web/machines/${id}/setup`)
   }
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    await deleteMachine(id)
+    router.push('/web/machines')
+  }
+
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("en-US", {
       year: "numeric",
@@ -415,13 +426,27 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
           </p>
         </div>
         {/* Desktop buttons */}
-        {!isSetup && (
-          <div className="hidden sm:flex items-center gap-2">
+        <div className="hidden sm:flex items-center gap-2">
+          {!isSetup && (
             <Button size="sm" onClick={handleSetupClick}>
               Setup Machine
             </Button>
-          </div>
-        )}
+          )}
+          {confirmingDelete ? (
+            <>
+              <span className="text-sm text-muted-foreground">Delete this machine?</span>
+              <Button size="sm" variant="destructive" disabled={isDeleting} onClick={handleDelete}>
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button>
+            </>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setConfirmingDelete(true)}>
+              <Trash2 className="h-4 w-4 mr-1" />
+              Delete
+            </Button>
+          )}
+        </div>
       </div>
       {/* Mobile buttons */}
       {!isSetup && (
