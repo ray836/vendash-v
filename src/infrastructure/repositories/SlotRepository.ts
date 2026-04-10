@@ -98,24 +98,19 @@ export class SlotRepository {
     if (machine.length === 0) throw new Error("Machine not found")
     const organizationId = machine[0].organizationId
 
-    const existingSlots = await this.findByMachineId(machineId)
-    const existingSlotIds = new Set(existingSlots.map((slot) => slot.id))
-
-    const existingSlotsToUpdate = updatedSlotsForMachine.filter((slot) => slot.id && existingSlotIds.has(slot.id))
-    const newSlotsToCreate = updatedSlotsForMachine.filter((slot) => !slot.id || !existingSlotIds.has(slot.id))
-
     await this.database.transaction(async (tx) => {
-      for (let i = 0; i < existingSlotsToUpdate.length; i++) {
-        const saveSlot = existingSlotsToUpdate[i]
-        if (!saveSlot.id) continue
+      for (let i = 0; i < updatedSlotsForMachine.length; i++) {
+        const saveSlot = updatedSlotsForMachine[i]
+        const id = saveSlot.id || randomUUID()
         await tx
-          .update(slots)
-          .set({
+          .insert(slots)
+          .values({
+            id,
             machineId,
             productId: saveSlot.productId ?? null,
             labelCode: saveSlot.labelCode,
-            rowKey: saveSlot.rowKey ?? undefined,
-            colIndex: saveSlot.colIndex ?? undefined,
+            rowKey: saveSlot.rowKey ?? null,
+            colIndex: saveSlot.colIndex ?? null,
             ccReaderCode: saveSlot.ccReaderCode || "",
             cardReaderId: saveSlot.cardReaderId || "",
             price: saveSlot.price.toString(),
@@ -123,34 +118,30 @@ export class SlotRepository {
             currentQuantity: saveSlot.currentQuantity,
             organizationId,
             sequenceNumber: i,
-            updatedAt: new Date(),
-            updatedBy: userId,
-          })
-          .where(eq(slots.id, saveSlot.id))
-      }
-
-      if (newSlotsToCreate.length > 0) {
-        await tx.insert(slots).values(
-          newSlotsToCreate.map((saveSlot, index) => ({
-            id: saveSlot.id || randomUUID(),
-            machineId,
-            productId: saveSlot.productId ?? null,
-            labelCode: saveSlot.labelCode,
-            rowKey: saveSlot.rowKey ?? undefined,
-            colIndex: saveSlot.colIndex ?? undefined,
-            ccReaderCode: saveSlot.ccReaderCode || "",
-            cardReaderId: saveSlot.cardReaderId || "",
-            price: saveSlot.price.toString(),
-            capacity: saveSlot.capacity,
-            currentQuantity: saveSlot.currentQuantity,
-            organizationId,
-            sequenceNumber: existingSlotsToUpdate.length + index,
             createdAt: new Date(),
             updatedAt: new Date(),
             createdBy: userId,
             updatedBy: userId,
-          }))
-        )
+          })
+          .onConflictDoUpdate({
+            target: slots.id,
+            set: {
+              machineId,
+              productId: saveSlot.productId ?? null,
+              labelCode: saveSlot.labelCode,
+              rowKey: saveSlot.rowKey ?? null,
+              colIndex: saveSlot.colIndex ?? null,
+              ccReaderCode: saveSlot.ccReaderCode || "",
+              cardReaderId: saveSlot.cardReaderId || "",
+              price: saveSlot.price.toString(),
+              capacity: saveSlot.capacity,
+              currentQuantity: saveSlot.currentQuantity,
+              organizationId,
+              sequenceNumber: i,
+              updatedAt: new Date(),
+              updatedBy: userId,
+            },
+          })
       }
     })
   }
