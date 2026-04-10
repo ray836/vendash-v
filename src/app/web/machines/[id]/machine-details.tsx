@@ -147,6 +147,8 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const [isLoadingSales, setIsLoadingSales] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupByType>(GroupByType.DAY)
   const isMobile = useIsMobile()
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const fetchPreKit = async () => {
     if (!machineData) return
@@ -249,9 +251,6 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const handleSetupClick = () => {
     router.push(`/web/machines/${id}/setup`)
   }
-
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   const handleDelete = async () => {
     setIsDeleting(true)
