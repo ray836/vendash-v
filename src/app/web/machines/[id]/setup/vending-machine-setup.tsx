@@ -641,7 +641,7 @@ export function VendingMachineSetup({
         },
         slots: slots.map((slot) => ({
           machineId,
-          productId: slot.productId || "",
+          productId: slot.productId || undefined,
           labelCode: slot.labelCode, // preserve original label — never reconstruct
           rowKey: slot.row,
           colIndex: slot.column,
