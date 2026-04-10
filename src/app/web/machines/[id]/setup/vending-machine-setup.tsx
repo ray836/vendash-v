@@ -629,6 +629,8 @@ export function VendingMachineSetup({
     return matchesSearch && matchesCategory
   })
 
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
   const handleSaveConfiguration = async () => {
     try {
       setIsSaving(true)
@@ -641,7 +643,7 @@ export function VendingMachineSetup({
         },
         slots: slots.map((slot) => ({
           machineId,
-          productId: slot.productId || undefined,
+          productId: slot.productId && UUID_REGEX.test(slot.productId) ? slot.productId : undefined,
           labelCode: slot.labelCode, // preserve original label — never reconstruct
           rowKey: slot.row,
           colIndex: slot.column,
