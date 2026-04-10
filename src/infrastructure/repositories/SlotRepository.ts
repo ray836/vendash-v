@@ -112,7 +112,7 @@ export class SlotRepository {
           .update(slots)
           .set({
             machineId,
-            productId: saveSlot.productId,
+            productId: saveSlot.productId ?? null,
             labelCode: saveSlot.labelCode,
             rowKey: saveSlot.rowKey ?? undefined,
             colIndex: saveSlot.colIndex ?? undefined,
@@ -134,7 +134,7 @@ export class SlotRepository {
           newSlotsToCreate.map((saveSlot, index) => ({
             id: saveSlot.id || randomUUID(),
             machineId,
-            productId: saveSlot.productId,
+            productId: saveSlot.productId ?? null,
             labelCode: saveSlot.labelCode,
             rowKey: saveSlot.rowKey ?? undefined,
             colIndex: saveSlot.colIndex ?? undefined,

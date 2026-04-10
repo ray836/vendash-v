@@ -675,6 +675,9 @@ export function VendingMachineSetup({
           setSavedSuccess(true)
           setTimeout(() => setSavedSuccess(false), 3000)
         }
+      } else {
+        console.error("Failed to save configuration:", result.error)
+        toast({ title: "Error", description: result.error || "Failed to save configuration. Please try again.", variant: "destructive" })
       }
     } catch (error) {
       console.error("Failed to save configuration:", error)

@@ -58,8 +58,9 @@ export async function saveSlots(machineId: string, slots: PublicSlotDTO[], ccRea
     })
     return { success: true }
   } catch (error) {
-    console.error("Failed to save slots:", error)
-    throw new Error("Failed to save machine configuration")
+    const message = error instanceof Error ? error.message : String(error)
+    console.error("Failed to save slots:", message)
+    return { success: false, error: message }
   }
 }
 
