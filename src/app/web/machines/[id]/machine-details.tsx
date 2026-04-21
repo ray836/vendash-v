@@ -149,6 +149,8 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
   const isMobile = useIsMobile()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [txPage, setTxPage] = useState(1)
+  const TX_PAGE_SIZE = 15
 
   const fetchPreKit = async () => {
     if (!machineData) return
@@ -939,45 +941,77 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                   </h3>
                   {!salesData || salesData.transactions.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">No transactions found</p>
-                  ) : (
-                    <div className="rounded-md border overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b bg-muted/50">
-                            <th className="text-left px-4 py-2 font-medium text-muted-foreground">Date & Time</th>
-                            <th className="text-left px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Type</th>
-                            <th className="text-left px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Card</th>
-                            <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {[...salesData.transactions]
-                            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                            .map((tx) => (
-                              <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                                <td className="px-4 py-3 text-muted-foreground">
-                                  {new Intl.DateTimeFormat("en-US", {
-                                    month: "short",
-                                    day: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  }).format(new Date(tx.createdAt))}
-                                </td>
-                                <td className="px-4 py-3 hidden sm:table-cell capitalize text-muted-foreground">
-                                  {tx.transactionType?.toLowerCase() ?? "—"}
-                                </td>
-                                <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground">
-                                  {tx.last4CardDigits ? `•••• ${tx.last4CardDigits}` : "—"}
-                                </td>
-                                <td className="px-4 py-3 text-right font-medium">
-                                  ${Number(tx.total).toFixed(2)}
-                                </td>
+                  ) : (() => {
+                    const sorted = [...salesData.transactions].sort(
+                      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                    )
+                    const totalPages = Math.ceil(sorted.length / TX_PAGE_SIZE)
+                    const paginated = sorted.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE)
+                    return (
+                      <>
+                        <div className="rounded-md border overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-muted/50">
+                                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Date & Time</th>
+                                <th className="text-left px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Type</th>
+                                <th className="text-left px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Card</th>
+                                <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
                               </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                            </thead>
+                            <tbody>
+                              {paginated.map((tx) => (
+                                <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                                  <td className="px-4 py-3 text-muted-foreground">
+                                    {new Intl.DateTimeFormat("en-US", {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }).format(new Date(tx.createdAt))}
+                                  </td>
+                                  <td className="px-4 py-3 hidden sm:table-cell capitalize text-muted-foreground">
+                                    {tx.transactionType?.toLowerCase() ?? "—"}
+                                  </td>
+                                  <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground">
+                                    {tx.last4CardDigits ? `•••• ${tx.last4CardDigits}` : "—"}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-medium">
+                                    ${Number(tx.total).toFixed(2)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between mt-3">
+                            <p className="text-sm text-muted-foreground">
+                              Page {txPage} of {totalPages}
+                            </p>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={txPage === 1}
+                                onClick={() => setTxPage((p) => p - 1)}
+                              >
+                                Previous
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={txPage === totalPages}
+                                onClick={() => setTxPage((p) => p + 1)}
+                              >
+                                Next
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
               </CardContent>
             </Card>
