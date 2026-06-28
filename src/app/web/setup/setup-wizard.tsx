@@ -17,6 +17,7 @@ import {
 import { CheckCircle2, Loader2, ArrowRight } from "lucide-react"
 import { createMachine } from "../machines/actions"
 import { AddProductDialog } from "../products/add-product"
+import { CatalogPicker } from "../products/catalog-picker"
 import { getSetupStatus, type SetupStatus } from "./actions"
 import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
 import { toast } from "@/hooks/use-toast"
@@ -187,13 +188,19 @@ export function SetupWizard() {
                 {productsDone ? `Products added (${status.productCount})` : "Add products"}
               </CardTitle>
             </div>
-            {machineDone && <AddProductDialog onSuccess={refresh} />}
+            {machineDone && (
+              <div className="flex items-center gap-2">
+                <CatalogPicker onSuccess={refresh} />
+                <AddProductDialog onSuccess={refresh} />
+              </div>
+            )}
           </div>
         </CardHeader>
         {machineDone && !productsDone && (
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Add the snacks or drinks this machine sells. Paste a Sam&apos;s Club / Costco link or enter them manually.
+              Browse the catalog and pick the snacks or drinks this machine sells. Can&apos;t find one?
+              Add your own with a Sam&apos;s Club / Costco link or manual entry.
             </p>
           </CardContent>
         )}

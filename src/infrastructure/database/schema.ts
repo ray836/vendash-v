@@ -68,6 +68,7 @@ export const organizations = pgTable("organizations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   address: text("address"),
+  region: text("region"), // owner's region; scopes which catalog products they see (filtering not yet wired)
   apiKey: text("api_key"),
   notificationEmail: text("notification_email"),
   lastOrderEmailSentAt: timestamp("last_order_email_sent_at"),
@@ -108,6 +109,30 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 
+// App-maintained shared catalog of common vending products. Read-only to owners:
+// they "pick" a standard product, which clones it into their org-scoped `products`
+// (linked back via products.sourceStandardId). Region is nullable = available
+// everywhere; region filtering is not wired up yet (schema room for later).
+export const standardProducts = pgTable("standard_products", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  recommendedPrice: decimal("recommended_price", {
+    precision: 10,
+    scale: 2,
+  }).notNull(),
+  category: text("category").notNull(),
+  image: text("image").notNull(),
+  vendorLink: text("vendor_link"),
+  vendorSku: text("vendor_sku"),
+  barcode: text("barcode"),
+  caseCost: decimal("case_cost", { precision: 10, scale: 2 }).notNull(),
+  caseSize: text("case_size").notNull(),
+  shelfLifeDays: integer("shelf_life_days"),
+  region: text("region"), // null = available in all regions
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
+
 export const products = pgTable("products", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -128,6 +153,11 @@ export const products = pgTable("products", {
   reorderPoint: integer("reorder_point"),
   shelfLifeDays: integer("shelf_life_days"),
   aliases: text("aliases").array(),
+  // Set when this product was cloned from the shared catalog; null = custom,
+  // owner-created product (never enters the shared catalog).
+  sourceStandardId: text("source_standard_id").references(
+    () => standardProducts.id
+  ),
   organizationId: text("organization_id")
     .references(() => organizations.id)
     .notNull(),

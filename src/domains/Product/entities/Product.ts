@@ -50,6 +50,9 @@ export class Product {
   public get aliases() {
     return this.props.aliases ?? []
   }
+  public get sourceStandardId() {
+    return this.props.sourceStandardId
+  }
   public get organizationId() {
     return this.props.organizationId
   }

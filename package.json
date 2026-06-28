@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:drop": "tsx src/scripts/drop-tables.ts",
     "db:seed": "tsx src/infrastructure/database/seed.ts",
+    "db:seed:catalog": "tsx src/infrastructure/database/seed-standard-products.ts",
     "db:clean:routes": "tsx src/infrastructure/database/clean-routes.ts",
     "db:seed:route": "tsx src/infrastructure/database/seed-driver-route.ts",
     "studio": "drizzle-kit studio",

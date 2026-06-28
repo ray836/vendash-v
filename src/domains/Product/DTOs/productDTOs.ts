@@ -17,6 +17,9 @@ export const BaseProductDTO = z.object({
   reorderPoint: z.number().optional(),
   shelfLifeDays: z.number().optional(),
   aliases: z.string().array().optional().default([]),
+  // Set when this product was cloned from the shared catalog; undefined = custom
+  // (owner-created, never in the shared catalog).
+  sourceStandardId: z.string().optional(),
   organizationId: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
