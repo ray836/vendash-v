@@ -2,10 +2,9 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
-import { ArrowLeft, Plus } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { useState, useEffect } from "react"
-import { createMachine, getLocations } from "../actions"
+import { createMachine } from "../actions"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 
@@ -35,15 +34,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
-
 
 const formSchema = z.object({
   machineId: z.string().min(2, {
@@ -52,11 +43,8 @@ const formSchema = z.object({
   model: z.string().min(2, {
     message: "Machine model is required.",
   }),
-  locationId: z.string({
-    required_error: "Please select a location.",
-  }),
-  specificLocation: z.string().min(2, {
-    message: "Specific location description is required.",
+  locationName: z.string().min(2, {
+    message: "Please describe where this machine is located.",
   }),
   type: z.string({
     required_error: "Please select a machine type.",
@@ -68,124 +56,25 @@ const formSchema = z.object({
   notes: z.string().optional(),
 })
 
-const locationFormSchema = z.object({
-  building: z.string().min(2, "Building name is required"),
-  floor: z.string().min(1, "Floor number is required"),
-})
-
-// Update the Location interface to match the actual data structure
-interface Location {
-  id: string
-  name: string
-  address: string
-}
-
-function AddLocationDialog({
-  onLocationAdded,
-}: {
-  onLocationAdded: (location: Location) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const locationForm = useForm<z.infer<typeof locationFormSchema>>({
-    resolver: zodResolver(locationFormSchema),
-    defaultValues: {
-      building: "",
-      floor: "",
-    },
-  })
-
-  const onSubmit = (values: z.infer<typeof locationFormSchema>) => {
-    const newLocation: Location = {
-      id: Date.now().toString(),
-      name: `${values.building} - Floor ${values.floor}`,
-      address: `${values.building}, Floor ${values.floor}`,
-    }
-    onLocationAdded(newLocation)
-    locationForm.reset()
-    setOpen(false)
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="h-10 w-10">
-          <Plus className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add New Location</DialogTitle>
-        </DialogHeader>
-        <Form {...locationForm}>
-          <form
-            onSubmit={locationForm.handleSubmit(onSubmit)}
-            className="space-y-4"
-          >
-            <FormField
-              control={locationForm.control}
-              name="building"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Building Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter building name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={locationForm.control}
-              name="floor"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Floor Number</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter floor number" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex justify-end">
-              <Button type="submit">Add Location</Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 export function NewVendingMachineForm() {
   const router = useRouter()
   const { toast } = useToast()
-  const [locations, setLocations] = useState<Location[]>([])
-
-  useEffect(() => {
-    getLocations().then(setLocations)
-  }, [])
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       machineId: "",
       model: "",
-      locationId: "",
-      specificLocation: "",
+      locationName: "",
       notes: "",
     },
   })
-
-  const handleLocationAdded = (newLocation: Location) => {
-    setLocations([...locations, newLocation])
-  }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       const result = await createMachine({
         type: values.type as MachineType,
-        locationId: values.locationId,
+        locationName: values.locationName,
         model: values.model,
         notes: values.notes || "",
         cardReaderId: values.cardReaderId || undefined,
@@ -215,7 +104,7 @@ export function NewVendingMachineForm() {
         className="flex items-center text-sm text-muted-foreground hover:text-primary mb-6"
       >
         <ArrowLeft className="h-4 w-4 mr-1" />
-        Back to Machines
+        Back to My Machines
       </Link>
 
       <Card>
@@ -307,60 +196,25 @@ export function NewVendingMachineForm() {
                 />
               </div>
 
-              <div className="grid gap-6">
-                <FormField
-                  control={form.control}
-                  name="locationId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Location</FormLabel>
-                      <div className="flex gap-2">
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="Select location" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {locations.map((location) => (
-                              <SelectItem key={location.id} value={location.id}>
-                                {location.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <AddLocationDialog
-                          onLocationAdded={handleLocationAdded}
-                        />
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="specificLocation"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Specific Location</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g., Near elevator, Main hallway"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Detailed location description to help locate the machine
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={form.control}
+                name="locationName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Where is this machine?</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g. Break Room, Lobby, Main Entrance"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      A simple description of where the machine is located
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

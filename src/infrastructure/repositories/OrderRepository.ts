@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm"
+import { eq, and, asc, ne } from "drizzle-orm"
 import { db } from "../database"
 import { orders, orderItems } from "../database/schema"
 import { Order } from "@/domains/Order/entities/Order"
@@ -24,9 +24,26 @@ export class OrderRepository {
       .select()
       .from(orders)
       .where(and(eq(orders.organizationId, organizationId), eq(orders.status, "draft")))
+      .orderBy(asc(orders.createdAt))
+      .limit(1)
     const order = result[0]
     if (!order) return null
     return this.toOrderEntity(order)
+  }
+
+  async findAllDraftOrdersByOrganizationId(organizationId: string): Promise<Order[]> {
+    const result = await this.database
+      .select()
+      .from(orders)
+      .where(and(eq(orders.organizationId, organizationId), eq(orders.status, "draft")))
+      .orderBy(asc(orders.createdAt))
+    return result.map(this.toOrderEntity)
+  }
+
+  async deleteOrdersExcept(keepId: string, organizationId: string): Promise<void> {
+    await this.database
+      .delete(orders)
+      .where(and(eq(orders.organizationId, organizationId), eq(orders.status, "draft"), ne(orders.id, keepId)))
   }
 
   async create(order: Order): Promise<Order> {
@@ -120,6 +137,10 @@ export class OrderRepository {
 
   async deleteOrderItem(orderItemId: string): Promise<void> {
     await this.database.delete(orderItems).where(eq(orderItems.id, orderItemId))
+  }
+
+  async deleteOrderItemsByOrderId(orderId: string): Promise<void> {
+    await this.database.delete(orderItems).where(eq(orderItems.orderId, orderId))
   }
 
   private toOrderEntity(order: typeof orders.$inferSelect): Order {

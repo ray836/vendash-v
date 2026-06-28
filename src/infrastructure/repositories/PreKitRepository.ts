@@ -7,8 +7,10 @@ import {
   routeStops,
   routes,
   locations,
+  stockingRecords,
 } from "../database/schema"
 import { eq, and } from "drizzle-orm"
+import { randomUUID } from "node:crypto"
 import { PreKit, PreKitItem } from "@/domains/PreKit/entities/PreKit"
 import {
   BasePreKitItem,
@@ -293,5 +295,14 @@ export class PreKitRepository {
         }))
       )
     }
+  }
+
+  async createStockingRecord(preKitId: string, notes: string | null, createdBy: string): Promise<void> {
+    await this.database.insert(stockingRecords).values({
+      id: randomUUID(),
+      preKitId,
+      notes,
+      createdBy,
+    })
   }
 }

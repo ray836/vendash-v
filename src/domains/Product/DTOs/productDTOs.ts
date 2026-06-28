@@ -15,6 +15,7 @@ export const BaseProductDTO = z.object({
   shippingAvailable: z.boolean(),
   shippingTimeInDays: z.number(),
   reorderPoint: z.number().optional(),
+  shelfLifeDays: z.number().optional(),
   aliases: z.string().array().optional().default([]),
   organizationId: z.string(),
   createdAt: z.date(),
@@ -36,6 +37,8 @@ export const PublicProductDTO = BaseProductDTO.pick({
   caseSize: true,
   shippingAvailable: true,
   shippingTimeInDays: true,
+  reorderPoint: true,
+  shelfLifeDays: true,
   aliases: true,
   organizationId: true,
 })

@@ -3,7 +3,6 @@ import {
   PublicInventoryDTO,
 } from "@/domains/Inventory/DTOs/inventoryDTOs"
 import { z } from "zod"
-import { TransactionItemSchemas } from "@/domains/Transaction/schemas/TransactionItemSchemas"
 const base = z.object({
   id: z.string(),
   name: z.string(),
@@ -15,6 +14,7 @@ const base = z.object({
   caseSize: z.number(),
   shippingAvailable: z.boolean(),
   shippingTimeInDays: z.number(),
+  shelfLifeDays: z.number().optional(),
   aliases: z.string().array().optional().default([]),
   organizationId: z.string(),
   createdAt: z.date(),
@@ -32,6 +32,7 @@ const publicProduct = base.pick({
   caseSize: true,
   shippingAvailable: true,
   shippingTimeInDays: true,
+  shelfLifeDays: true,
   aliases: true,
   organizationId: true,
 })
@@ -61,7 +62,14 @@ const publicProductWithInventorySalesOrderData = z.object({
 const productWithInventorySalesOrderData = z.object({
   product: base,
   inventory: BaseInventoryDTO,
-  transactions: z.array(TransactionItemSchemas.base),
+  salesAgg: z.object({
+    totalSales: z.number(),
+    totalUnitsSold: z.number(),
+    totalRevenue: z.number(),
+    // Recent-window unit sums used to compute weighted velocity (see inventoryForecast)
+    unitsSold7: z.number(),
+    unitsSold35: z.number(),
+  }),
   OnNextOrder: z.boolean(),
 })
 

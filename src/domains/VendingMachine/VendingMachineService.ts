@@ -99,8 +99,8 @@ export async function updateMachineStatus(
   const existing = await machineRepo.findById(id)
   if (!existing) throw new Error("Vending machine not found")
   const updated = existing.updateStatus(data.status)
-  // Note: status update doesn't persist via update() due to current repo - return DTO directly
-  return updated.toPublicDTO()
+  const saved = await machineRepo.update(updated)
+  return saved.toPublicDTO()
 }
 
 export async function updateMachineCardReader(

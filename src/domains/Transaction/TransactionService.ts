@@ -9,9 +9,11 @@ import { GetTransactionsForMachineResponseDTO } from "./schemas/GetTransactionsF
 
 export async function getOrgTransactions(
   repo: TransactionRepository,
-  organizationId: string
+  organizationId: string,
+  startDate?: Date,
+  endDate?: Date
 ): Promise<PublicTransactionWithItemsAndProductDTO[]> {
-  return repo.findByOrganizationIdWithItems(organizationId)
+  return repo.findByOrganizationIdWithItems(organizationId, startDate, endDate)
 }
 
 export async function getTransactionGraphData(
@@ -68,7 +70,10 @@ export async function getTransactionsForMachine(
   startDate: Date,
   endDate: Date
 ): Promise<GetTransactionsForMachineResponseDTO> {
-  const transactions = await repo.findByMachineId(machineId, startDate, endDate)
+  const [transactions, transactionsWithItems] = await Promise.all([
+    repo.findByMachineId(machineId, startDate, endDate),
+    repo.findByMachineIdWithItems(machineId, startDate, endDate),
+  ])
 
   const publicTransactions = transactions.map((transaction) => ({
     id: transaction.id,
@@ -122,19 +127,85 @@ export async function getTransactionsForMachine(
     ? Array.from(monthlyMap.values()).reduce((sum, txs) => sum + txs.reduce((s, t) => s + t.total, 0), 0) / monthlyMap.size
     : 0
 
+  // Build COGS maps keyed by the same period strings used in chart data
+  const cogsDailyMap = new Map<string, number>()
+  const cogsWeeklyMap = new Map<string, number>()
+  const cogsMonthlyMap = new Map<string, number>()
+
+  for (const tx of transactionsWithItems) {
+    for (const item of tx.items ?? []) {
+      const cost = Number(item.product?.caseCost ?? 0)
+      const size = Number(item.product?.caseSize ?? 0)
+      if (cost <= 0 || size <= 0) continue
+      const unitCost = (cost / size) * (item.quantity ?? 1)
+      const d = new Date(tx.createdAt)
+      const dayKey = d.toISOString().split("T")[0]
+      const weekKey = getWeek(d)
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+      cogsDailyMap.set(dayKey,  (cogsDailyMap.get(dayKey)  ?? 0) + unitCost)
+      cogsWeeklyMap.set(weekKey, (cogsWeeklyMap.get(weekKey) ?? 0) + unitCost)
+      cogsMonthlyMap.set(monthKey, (cogsMonthlyMap.get(monthKey) ?? 0) + unitCost)
+    }
+  }
+
+  const hasCost = cogsDailyMap.size > 0 || cogsWeeklyMap.size > 0 || cogsMonthlyMap.size > 0
+
   // Pre-compute chart-ready data server-side (avoids client-side Date serialization issues)
-  const toChartData = (map: Map<string, typeof publicTransactions>) =>
+  const toChartData = (
+    map: Map<string, typeof publicTransactions>,
+    cogsMap: Map<string, number>
+  ) =>
     Array.from(map.entries())
-      .map(([period, txs]) => ({ period, sales: Math.round(txs.reduce((s, t) => s + t.total, 0) * 100) / 100 }))
+      .map(([period, txs]) => {
+        const sales = Math.round(txs.reduce((s, t) => s + t.total, 0) * 100) / 100
+        const cost  = hasCost ? Math.round((cogsMap.get(period) ?? 0) * 100) / 100 : undefined
+        return { period, sales, ...(cost !== undefined ? { cost } : {}) }
+      })
       .sort((a, b) => a.period.localeCompare(b.period))
+
+  // Product performance rollup (reuses already-fetched transactionsWithItems)
+  type PerfAccum = { productName: string; unitsSold: number; revenue: number; cost: number; hasCost: boolean }
+  const perfMap = new Map<string, PerfAccum>()
+  for (const tx of transactionsWithItems) {
+    for (const item of tx.items ?? []) {
+      const id = item.productId
+      const qty = item.quantity ?? 1
+      const rev = Number(item.salePrice) * qty
+      const caseCost = Number(item.product?.caseCost ?? 0)
+      const caseSize = Number(item.product?.caseSize ?? 0)
+      const unitCost = caseCost > 0 && caseSize > 0 ? (caseCost / caseSize) * qty : null
+      const acc = perfMap.get(id) ?? { productName: item.product?.name ?? "Unknown", unitsSold: 0, revenue: 0, cost: 0, hasCost: false }
+      acc.unitsSold += qty
+      acc.revenue += rev
+      if (unitCost !== null) { acc.cost += unitCost; acc.hasCost = true }
+      perfMap.set(id, acc)
+    }
+  }
+  const productPerformance = Array.from(perfMap.entries())
+    .map(([productId, p]) => {
+      const rev = Math.round(p.revenue * 100) / 100
+      const profit = p.hasCost ? Math.round((p.revenue - p.cost) * 100) / 100 : null
+      const margin = profit !== null && rev > 0 ? Math.round((profit / rev) * 100) : null
+      return {
+        productId,
+        productName: p.productName,
+        unitsSold: p.unitsSold,
+        revenue: rev,
+        cost: p.hasCost ? Math.round(p.cost * 100) / 100 : null,
+        profit,
+        margin,
+      }
+    })
+    .sort((a, b) => b.revenue - a.revenue)
 
   return {
     transactions: publicTransactions,
     daily, dailyAverage,
     weekly, weeklyAverage,
     monthly, monthlyAverage,
-    dailyChartData: toChartData(dailyMap),
-    weeklyChartData: toChartData(weeklyMap),
-    monthlyChartData: toChartData(monthlyMap),
+    dailyChartData: toChartData(dailyMap, cogsDailyMap),
+    weeklyChartData: toChartData(weeklyMap, cogsWeeklyMap),
+    monthlyChartData: toChartData(monthlyMap, cogsMonthlyMap),
+    productPerformance,
   }
 }

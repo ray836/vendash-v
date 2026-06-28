@@ -17,6 +17,7 @@ import {
   ChevronUp,
   ChevronDown,
   TrendingUp,
+  Loader2,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -273,7 +274,9 @@ function ProductCard({
                     trend={productDataMetrics.salesData.trend > 1 ? "up" : "down"}
                   />
                   <span className="text-sm">
-                    {productDataMetrics.salesData.averageDailySales}/day
+                    {productDataMetrics.salesData.averageDailySales > 0
+                      ? `${Number(productDataMetrics.salesData.averageDailySales.toFixed(1))}/day`
+                      : "0/day"}
                   </span>
                 </div>
               </div>
@@ -292,17 +295,21 @@ function ProductCard({
             <div className="flex justify-between items-center">
               <div className="text-sm">
                 <span className="text-muted-foreground mr-1">Days left:</span>
-                <span
-                  className={
-                    productDataMetrics.salesData.daysToSellOut <= 3
-                      ? "text-red-600 font-medium"
-                      : productDataMetrics.salesData.daysToSellOut <= 7
-                      ? "text-yellow-600"
-                      : ""
-                  }
-                >
-                  {productDataMetrics.salesData.daysToSellOut}
-                </span>
+                {productDataMetrics.salesData.averageDailySales === 0 ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  <span
+                    className={
+                      productDataMetrics.salesData.daysToSellOut <= 7
+                        ? "text-red-600 font-medium"
+                        : productDataMetrics.salesData.daysToSellOut <= 14
+                        ? "text-yellow-600"
+                        : ""
+                    }
+                  >
+                    {Math.round(productDataMetrics.salesData.daysToSellOut)}
+                  </span>
+                )}
               </div>
               <div className="flex gap-2">
                 <Link href={`products/${productDataMetrics.product.id}`}>
@@ -380,8 +387,17 @@ export function ProductsInventory() {
   const [error, setError] = useState<string | null>(null)
   const [productsInNextOrder, setProductsInNextOrder] = useState<Set<string>>(new Set())
   const [showSalesData, setShowSalesData] = useState(false)
+  const [activeOnly, setActiveOnly] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [viewMode, setViewMode] = useState<"table" | "grid">("table")
+
+  const handleActiveOnlyChange = (checked: boolean) => {
+    setActiveOnly(checked)
+    if (checked) {
+      setShowSalesData(true)
+      setSort({ key: "salesData.daysToSellOut", direction: "asc" })
+    }
+  }
 
   // Different items per page for table vs grid view
   const itemsPerPage = viewMode === "table" ? 20 : 12
@@ -429,20 +445,31 @@ export function ProductsInventory() {
         return false
       }
 
+      // Active sellers filter: hide products with no recent sales
+      if (activeOnly && productDataMetrics.salesData.averageDailySales === 0) {
+        return false
+      }
+
       return true
     })
     .sort((a, b) => {
+      // In normal view, float machine-assigned products above unassigned ones
+      if (!activeOnly) {
+        const aInMachines = (a.inventory?.machines ?? 0) > 0
+        const bInMachines = (b.inventory?.machines ?? 0) > 0
+        if (aInMachines !== bInMachines) return aInMachines ? -1 : 1
+      }
+
       const aValue = getNestedValue(a, sort.key)
       const bValue = getNestedValue(b, sort.key)
 
-      console.log(
-        `Comparing ${a.product.name} (${aValue}) with ${b.product.name} (${bValue})`
-      )
-
       if (aValue === null || bValue === null) return 0
 
-      // Handle numeric comparison for daysToSellOut
+      // Handle numeric comparison for daysToSellOut — push zero-sales products to bottom
       if (sort.key === "salesData.daysToSellOut") {
+        const noSalesA = a.salesData.averageDailySales === 0
+        const noSalesB = b.salesData.averageDailySales === 0
+        if (noSalesA !== noSalesB) return noSalesA ? 1 : -1
         const numA = Number(aValue)
         const numB = Number(bValue)
         return sort.direction === "asc" ? numA - numB : numB - numA
@@ -685,6 +712,18 @@ export function ProductsInventory() {
               </Label>
             </div>
 
+            <div className={`flex items-center space-x-2 border rounded-md px-3 py-1 transition-colors ${activeOnly ? "border-primary bg-primary/5" : ""}`}>
+              <Switch
+                id="active-only"
+                checked={activeOnly}
+                onCheckedChange={handleActiveOnlyChange}
+              />
+              <Label htmlFor="active-only" className="flex items-center gap-2 cursor-pointer text-sm">
+                <AlertTriangle className="h-4 w-4" />
+                <span>Active Sellers</span>
+              </Label>
+            </div>
+
             {canEditProducts && <AddProductDialog onSuccess={refreshProducts} />}
           </div>
 
@@ -781,7 +820,24 @@ export function ProductsInventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProducts.length === 0 ? (
+                  {isLoading ? (
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-12 h-12 rounded-md bg-muted animate-pulse shrink-0" />
+                            <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell"><div className="h-4 w-16 bg-muted animate-pulse rounded" /></TableCell>
+                        <TableCell><div className="h-4 w-8 bg-muted animate-pulse rounded" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><div className="h-4 w-8 bg-muted animate-pulse rounded" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><div className="h-4 w-8 bg-muted animate-pulse rounded" /></TableCell>
+                        <TableCell><div className="h-5 w-16 bg-muted animate-pulse rounded-full" /></TableCell>
+                        <TableCell><div className="h-8 w-24 bg-muted animate-pulse rounded" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : filteredProducts.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={10}
@@ -839,8 +895,9 @@ export function ProductsInventory() {
                                   }
                                 />
                                 <span>
-                                  {productDataMetrics.salesData.averageDailySales}
-                                  /day
+                                  {productDataMetrics.salesData.averageDailySales > 0
+                                    ? `${Number(productDataMetrics.salesData.averageDailySales.toFixed(1))}/day`
+                                    : <span className="text-muted-foreground">0/day</span>}
                                 </span>
                               </div>
                             </TableCell>
@@ -854,18 +911,21 @@ export function ProductsInventory() {
                               />
                             </TableCell>
                             <TableCell className="hidden md:table-cell">
-                              <span
-                                className={
-                                  productDataMetrics.salesData.daysToSellOut <= 3
-                                    ? "text-red-600 font-medium"
-                                    : productDataMetrics.salesData.daysToSellOut <=
-                                      7
-                                    ? "text-yellow-600"
-                                    : ""
-                                }
-                              >
-                                {productDataMetrics.salesData.daysToSellOut} days
-                              </span>
+                              {productDataMetrics.salesData.averageDailySales === 0 ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <span
+                                  className={
+                                    productDataMetrics.salesData.daysToSellOut <= 7
+                                      ? "text-red-600 font-medium"
+                                      : productDataMetrics.salesData.daysToSellOut <= 14
+                                      ? "text-yellow-600"
+                                      : ""
+                                  }
+                                >
+                                  {Math.round(productDataMetrics.salesData.daysToSellOut)} days
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell>
                               <InventoryStatusBadge
@@ -977,7 +1037,12 @@ export function ProductsInventory() {
         </TabsContent>
 
         <TabsContent value="grid" className="mt-4">
-          {filteredProducts.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20 text-muted-foreground gap-3">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span>Loading products...</span>
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-8 text-center">
                 <Package className="h-12 w-12 text-muted-foreground mb-4" />

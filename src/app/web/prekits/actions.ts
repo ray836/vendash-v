@@ -82,6 +82,27 @@ export async function pickPreKit(preKitId: string) {
   }
 }
 
+export async function stockPreKitPartial(preKitId: string, stockedProductIds: string[], note: string) {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+
+  try {
+    const preKitRepo = new PreKitRepository(db)
+    const slotRepo = new SlotRepository(db)
+    const inventoryRepo = new InventoryRepository(db)
+    const inventoryTransactionRepo = new InventoryTransactionRepository(db)
+
+    const result = await PreKitService.stockPreKitPartial(
+      preKitRepo, slotRepo, inventoryRepo, inventoryTransactionRepo,
+      preKitId, stockedProductIds, note, session.user.id, session.user.organizationId
+    )
+    return result.success ? { success: true } : { success: false, error: result.error }
+  } catch (error) {
+    console.error("Error partially stocking pre-kit:", error)
+    return { success: false, error: "Failed to stock pre-kit" }
+  }
+}
+
 export async function stockPreKit(preKitId: string) {
   const session = await auth()
   if (!session) throw new Error('Unauthorized')

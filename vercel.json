@@ -4,6 +4,12 @@
       "maxDuration": 60
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/auto-populate-order",
+      "schedule": "0 13 * * *"
+    }
+  ],
   "installCommand": "npm install --legacy-peer-deps",
   "build": {
     "env": {

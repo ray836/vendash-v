@@ -11,6 +11,7 @@ import {
 export interface SalesChartData {
   period: string
   sales: number
+  cost?: number
 }
 
 export interface SalesChartProps {
@@ -43,7 +44,6 @@ function formatLabel(period: string): string {
   return period
 }
 
-// How often to show an x-axis label given N bars
 function labelInterval(n: number): number {
   if (n <= 12) return 1
   if (n <= 31) return 7
@@ -60,20 +60,37 @@ export function SalesChart({ data, groupBy }: SalesChartProps) {
     )
   }
 
+  const hasCostData = data.some((d) => d.cost != null && d.cost > 0)
   const maxSales = Math.max(...data.map((d) => d.sales), 1)
   const chartHeight = 180
   const interval = labelInterval(data.length)
 
   return (
     <div className="w-full overflow-hidden">
+      {hasCostData && (
+        <div className="flex gap-4 mb-2 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-green-500" />
+            <span className="text-muted-foreground">Profit</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm bg-orange-400" />
+            <span className="text-muted-foreground">Cost</span>
+          </div>
+        </div>
+      )}
       <div
         className="flex items-end gap-[2px]"
         style={{ height: chartHeight + 28 }}
       >
         {data.map((item, i) => {
-          const barHeight = Math.max((item.sales / maxSales) * chartHeight, 2)
           const label = formatLabel(item.period)
           const showLabel = i % interval === 0 || i === data.length - 1
+          const cost = hasCostData ? Math.min(item.cost ?? 0, item.sales) : 0
+          const profit = item.sales - cost
+          const totalHeight = Math.max((item.sales / maxSales) * chartHeight, 2)
+          const costHeight = item.sales > 0 ? (cost / item.sales) * totalHeight : 0
+          const profitHeight = totalHeight - costHeight
 
           return (
             <div
@@ -84,15 +101,23 @@ export function SalesChart({ data, groupBy }: SalesChartProps) {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div
-                      className="w-full bg-green-500 hover:bg-green-400 rounded-t-sm transition-colors cursor-pointer"
-                      style={{ height: `${barHeight}px` }}
-                    />
+                    <div className="w-full flex flex-col justify-end cursor-pointer rounded-t-sm overflow-hidden" style={{ height: totalHeight }}>
+                      <div className="w-full bg-green-500 hover:bg-green-400 transition-colors" style={{ height: profitHeight }} />
+                      {hasCostData && costHeight > 0 && (
+                        <div className="w-full bg-orange-400 hover:bg-orange-300 transition-colors" style={{ height: costHeight }} />
+                      )}
+                    </div>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <div className="text-sm">
+                    <div className="text-sm space-y-1">
                       <div className="font-semibold">{label}</div>
-                      <div>${item.sales.toFixed(2)}</div>
+                      <div>Revenue: ${item.sales.toFixed(2)}</div>
+                      {hasCostData && (
+                        <>
+                          <div>Cost: ${cost.toFixed(2)}</div>
+                          <div>Profit: ${profit.toFixed(2)}</div>
+                        </>
+                      )}
                     </div>
                   </TooltipContent>
                 </Tooltip>

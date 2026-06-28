@@ -46,6 +46,7 @@ interface PreKitDetailsDialogProps {
   onPreKitPicked?: () => void
   onPreKitStocked?: () => void
   onPreKitDeleted?: () => void
+  skipPickedStep?: boolean
 }
 
 // A product group for the picking (OPEN) phase
@@ -67,6 +68,7 @@ export function PreKitDetailsDialog({
   onPreKitPicked,
   onPreKitStocked,
   onPreKitDeleted,
+  skipPickedStep = false,
 }: PreKitDetailsDialogProps) {
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({})
   const [isPicking, setIsPicking] = useState(false)
@@ -177,7 +179,7 @@ export function PreKitDetailsDialog({
   const progressDone = isGroupedView
     ? productGroups.filter(isGroupChecked).length
     : preKit.items.filter((item) => checkedItems[item.id]).length
-  const progressLabel = preKit.status === "PICKED" ? "filled" : "picked"
+  const progressLabel = (preKit.status === "PICKED" || skipPickedStep) ? "filled" : "picked"
 
   const handleSelectAll = () => {
     if (isGroupedView) {
@@ -249,10 +251,10 @@ export function PreKitDetailsDialog({
     try {
       setIsPicking(true)
       setError(null)
-      if (preKit.status === "PICKED") {
+      if (preKit.status === "PICKED" || (skipPickedStep && preKit.status === "OPEN")) {
         const result = await stockPreKit(preKit.id)
         if (result.success) { onPreKitStocked?.(); onOpenChange(false) }
-        else setError(result.error || "Failed to mark pre-kit as filled")
+        else setError(result.error || "Failed to mark as restocked")
       } else {
         const result = await pickPreKit(preKit.id)
         if (result.success) { onPreKitPicked?.(); onOpenChange(false) }
@@ -287,7 +289,7 @@ export function PreKitDetailsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Package className="h-6 w-6" />
-            <span>Pre-kit Details</span>
+            <span>Fill Checklist</span>
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
@@ -300,9 +302,9 @@ export function PreKitDetailsDialog({
               <div className="flex items-center gap-2 min-w-0">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-400" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-yellow-400">Insufficient warehouse stock</p>
+                  <p className="text-sm font-medium text-yellow-400">Not enough inventory</p>
                   <p className="text-xs text-muted-foreground">
-                    {shortProductIds.size} product{shortProductIds.size !== 1 ? "s" : ""} don't have enough inventory to fill this pre-kit.
+                    {shortProductIds.size} product{shortProductIds.size !== 1 ? "s" : ""} don&apos;t have enough in storage to fill all slots.
                   </p>
                 </div>
               </div>
@@ -340,13 +342,12 @@ export function PreKitDetailsDialog({
                 <Package className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h3 className="font-medium text-lg">#{preKit.id.slice(0, 8).toUpperCase()}</h3>
+                <h3 className="font-medium text-lg">
+                  {preKit.locationName || preKit.machineId}
+                </h3>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Truck className="h-4 w-4" />
-                  <span>{preKit.locationName || preKit.machineId}</span>
-                  {preKit.locationName && (
-                    <span className="text-xs text-muted-foreground/60">{preKit.machineId}</span>
-                  )}
+                  <span>{preKit.machineId}</span>
                 </div>
               </div>
             </div>
@@ -411,13 +412,18 @@ export function PreKitDetailsDialog({
                               <div className="text-xs text-muted-foreground mt-0.5">
                                 Slots: <span className="font-mono">{group.slotCodes.join(", ")}</span>
                               </div>
-                              <div className="text-xs text-muted-foreground mt-1">
+                              <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
                                 Need: <span className="font-semibold">{group.totalQuantity}</span>
                                 {group.inStock !== undefined && (
-                                  <span className={`ml-2 ${group.isShort ? "text-red-500 font-semibold" : ""}`}>
-                                    In Stock: {group.inStock}
-                                    {group.isShort && <AlertTriangle className="inline ml-1 h-3 w-3 text-red-500" />}
-                                  </span>
+                                  <>
+                                    <span>· Stock:</span>
+                                    {group.inStock === 0 ? (
+                                      <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" title="Out of stock" />
+                                    ) : group.isShort ? (
+                                      <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" title="Low stock" />
+                                    ) : null}
+                                    <span className={group.inStock === 0 ? "text-red-500 font-semibold" : group.isShort ? "text-amber-500 font-semibold" : "font-semibold"}>{group.inStock}</span>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -449,7 +455,7 @@ export function PreKitDetailsDialog({
                             <th className="px-2 py-2 text-left">Slots</th>
                             <th className="px-2 py-2 text-left">Need</th>
                             <th className="px-2 py-2 text-left">Stock</th>
-                            <th className="px-2 py-2 text-center">Picked</th>
+                            <th className="px-2 py-2 text-center">{skipPickedStep ? "Filled" : "Picked"}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -479,10 +485,14 @@ export function PreKitDetailsDialog({
                                 <td className="px-2 py-2 font-medium">{group.totalQuantity}</td>
                                 <td className="px-2 py-2">
                                   {group.inStock !== undefined ? (
-                                    <span className={group.isShort ? "text-red-500 font-semibold" : ""}>
-                                      {group.inStock}
-                                      {group.isShort && <AlertTriangle className="inline ml-1 h-3 w-3 text-red-500" />}
-                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={group.inStock === 0 ? "text-red-500 font-semibold" : group.isShort ? "text-amber-500 font-semibold" : ""}>{group.inStock}</span>
+                                      {group.inStock === 0 ? (
+                                        <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" title="Out of stock" />
+                                      ) : group.isShort ? (
+                                        <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" title="Low stock" />
+                                      ) : null}
+                                    </div>
                                   ) : (
                                     <span className="text-muted-foreground">—</span>
                                   )}
@@ -746,8 +756,10 @@ export function PreKitDetailsDialog({
                     onClick={handleAction}
                   >
                     {isPicking
-                      ? `Marking as ${preKit.status === "PICKED" ? "Filled" : "Picked"}...`
-                      : `Mark as ${preKit.status === "PICKED" ? "Filled" : "Picked"}`}
+                      ? "Marking..."
+                      : skipPickedStep && preKit.status === "OPEN"
+                        ? "Mark as Filled"
+                        : `Mark as ${preKit.status === "PICKED" ? "Filled" : "Picked"}`}
                   </Button>
                 </>
               )}

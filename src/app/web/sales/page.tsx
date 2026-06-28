@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { CalendarIcon, Download, Filter, Search } from "lucide-react"
+import { CalendarIcon, Search } from "lucide-react"
 import Image from "next/image"
 import { format } from "date-fns"
 
@@ -88,7 +88,6 @@ function sortTransactionsByDate(
   })
 }
 
-import { useRole } from "@/lib/role-context"
 import { AccessGuard } from "@/components/access-guard"
 import { UserRole } from "@/domains/User/entities/User"
 
@@ -254,10 +253,6 @@ function SalesPageContent() {
                   onChange={handleSearchChange}
                 />
               </div>
-              <Button variant="outline" className="flex items-center gap-2">
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline">Filters</span>
-              </Button>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="flex items-center gap-2">
@@ -289,10 +284,6 @@ function SalesPageContent() {
                   <SelectItem value="refunded">Refunded</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
             </div>
           </div>
 

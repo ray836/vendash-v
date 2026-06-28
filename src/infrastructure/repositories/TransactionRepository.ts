@@ -1,4 +1,5 @@
 import { and, eq, gte, lte, desc } from "drizzle-orm"
+import { randomUUID } from "node:crypto"
 import {
   transactions,
   vendingMachines,
@@ -34,12 +35,44 @@ export class TransactionRepository {
   }
 
   async findByOrganizationIdWithItems(
-    organizationId: string
+    organizationId: string,
+    startDate?: Date,
+    endDate?: Date
   ): Promise<PublicTransactionWithItemsAndProductDTO[]> {
+    const conditions = [eq(transactions.organizationId, organizationId)]
+    if (startDate) conditions.push(gte(transactions.createdAt, startDate))
+    if (endDate) conditions.push(lte(transactions.createdAt, endDate))
+
     const results = await this.database
       .select()
       .from(transactions)
-      .where(eq(transactions.organizationId, organizationId))
+      .where(and(...conditions))
+      .leftJoin(transactionItems, eq(transactions.id, transactionItems.transactionId))
+      .leftJoin(products, eq(transactionItems.productId, products.id))
+      .leftJoin(vendingMachines, eq(transactions.cardReaderId, vendingMachines.cardReaderId))
+
+    return transformToNestedTransactionList(results as unknown as TransactionRow[])
+  }
+
+  async findByMachineIdWithItems(
+    machineId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<PublicTransactionWithItemsAndProductDTO[]> {
+    const machine = await this.database.query.vendingMachines.findFirst({
+      where: eq(vendingMachines.id, machineId),
+      columns: { id: true, cardReaderId: true },
+    })
+    if (!machine?.cardReaderId) return []
+
+    const results = await this.database
+      .select()
+      .from(transactions)
+      .where(and(
+        eq(transactions.cardReaderId, machine.cardReaderId),
+        gte(transactions.createdAt, startDate),
+        lte(transactions.createdAt, endDate)
+      ))
       .leftJoin(transactionItems, eq(transactions.id, transactionItems.transactionId))
       .leftJoin(products, eq(transactionItems.productId, products.id))
       .leftJoin(vendingMachines, eq(transactions.cardReaderId, vendingMachines.cardReaderId))
@@ -101,6 +134,55 @@ export class TransactionRepository {
       quantity: r.quantity,
       salePrice: typeof r.salePrice === "string" ? parseFloat(r.salePrice) : Number(r.salePrice),
     }))
+  }
+
+  /** Most recent transaction timestamp for a card reader, or null if none. */
+  async findLatestByCardReader(cardReaderId: string): Promise<Date | null> {
+    const [row] = await this.database
+      .select({ createdAt: transactions.createdAt })
+      .from(transactions)
+      .where(eq(transactions.cardReaderId, cardReaderId))
+      .orderBy(desc(transactions.createdAt))
+      .limit(1)
+    return row?.createdAt ?? null
+  }
+
+  /** Insert one transaction plus its line items (used for manual reconciliation sales). */
+  async createSale(
+    tx: {
+      organizationId: string
+      cardReaderId: string
+      createdAt: Date
+      transactionType: string
+      total: number
+      last4CardDigits: string
+      data?: Record<string, unknown>
+    },
+    items: { productId: string; quantity: number; salePrice: number; slotCode: string }[]
+  ): Promise<void> {
+    const transactionId = randomUUID()
+    await this.database.insert(transactions).values({
+      id: transactionId,
+      organizationId: tx.organizationId,
+      createdAt: tx.createdAt,
+      transactionType: tx.transactionType,
+      total: tx.total.toFixed(2),
+      last4CardDigits: tx.last4CardDigits,
+      cardReaderId: tx.cardReaderId,
+      data: tx.data ?? {},
+    })
+    if (items.length > 0) {
+      await this.database.insert(transactionItems).values(
+        items.map((item) => ({
+          id: randomUUID(),
+          transactionId,
+          productId: item.productId,
+          quantity: item.quantity,
+          salePrice: item.salePrice.toFixed(2),
+          slotCode: item.slotCode,
+        }))
+      )
+    }
   }
 
   async delete(id: string): Promise<void> {

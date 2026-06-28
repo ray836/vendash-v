@@ -1,7 +1,7 @@
 import { Slot } from "@/domains/Slot/entities/Slot"
 import { db } from "@/infrastructure/database"
 import { slots, products, vendingMachines } from "@/infrastructure/database/schema"
-import { eq, sql } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { randomUUID } from "node:crypto"
 import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import { SaveSlot } from "@/domains/Slot/schemas/SaveSlotsSchemas"
@@ -17,10 +17,11 @@ export class SlotRepository {
     return this.toEntity(slot)
   }
 
-  async updateSlotQuantity(slotId: string, newQuantity: number): Promise<void> {
+  /** Set a slot's current quantity to an absolute value. */
+  async setSlotQuantity(slotId: string, quantity: number): Promise<void> {
     await this.database
       .update(slots)
-      .set({ currentQuantity: sql`${slots.currentQuantity} + ${newQuantity}` })
+      .set({ currentQuantity: quantity, updatedAt: new Date() })
       .where(eq(slots.id, slotId))
   }
 

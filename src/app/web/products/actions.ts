@@ -31,6 +31,7 @@ export async function createProduct(formData: {
   caseCost: number
   caseSize: number
   shippingAvailable: boolean
+  shelfLifeDays?: number
 }) {
   const session = await auth()
   if (!session) throw new Error('Unauthorized')
@@ -50,6 +51,7 @@ export async function createProduct(formData: {
       caseCost: formData.caseCost,
       caseSize: formData.caseSize,
       shippingAvailable: formData.shippingAvailable,
+      shelfLifeDays: formData.shelfLifeDays,
       aliases,
       organizationId,
       createdAt: new Date(),

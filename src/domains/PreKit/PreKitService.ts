@@ -348,6 +348,58 @@ export async function generatePreKitsForRoute(
   return { routeId: request.routeId, results, totalPreKitsGenerated, totalItemsToStock, totalEstimatedTime }
 }
 
+export async function stockPreKitPartial(
+  preKitRepo: PreKitRepository,
+  slotRepo: SlotRepository,
+  inventoryRepo: InventoryRepository,
+  inventoryTransactionRepo: InventoryTransactionRepository,
+  preKitId: string,
+  stockedProductIds: string[],
+  note: string,
+  userId: string,
+  organizationId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const preKit = await preKitRepo.findById(preKitId)
+    if (!preKit) return { success: false, error: "Pre-kit not found" }
+    if (preKit.status === PreKitStatus.STOCKED) return { success: false, error: "Pre-kit is already stocked" }
+
+    const items = await preKitRepo.getItems(preKitId)
+    const stockedSet = new Set(stockedProductIds)
+
+    for (const item of items) {
+      if (!stockedSet.has(item.productId)) continue
+      const slot = await slotRepo.findById(item.slotId)
+      if (!slot) continue
+
+      await slotRepo.setSlotQuantity(item.slotId, Math.min(slot.capacity, slot.currentQuantity + item.quantity))
+
+      const transaction = InventoryTransaction.create({
+        productId: item.productId,
+        organizationId,
+        transactionType: "stock",
+        quantity: -item.quantity,
+        locationFrom: "storage",
+        locationTo: `machine_${preKit.machineId}_slot_${item.slotId}`,
+        referenceType: "prekit",
+        referenceId: preKitId,
+        notes: `Partial stock: ${item.quantity} units to machine ${preKit.machineId}, slot ${item.slotId}`,
+        createdBy: userId,
+        metadata: { preKitId, machineId: preKit.machineId, slotId: item.slotId },
+      })
+      await inventoryTransactionRepo.create(transaction)
+      await inventoryRepo.transferStorageToMachines(item.productId, item.quantity, organizationId)
+    }
+
+    await preKitRepo.createStockingRecord(preKitId, note.trim() || null, userId)
+    await preKitRepo.updateStatus(preKitId, PreKitStatus.STOCKED, userId)
+    return { success: true }
+  } catch (error) {
+    console.error("Error partially stocking pre-kit:", error)
+    return { success: false, error: "Failed to stock pre-kit" }
+  }
+}
+
 export async function stockPreKit(
   preKitRepo: PreKitRepository,
   slotRepo: SlotRepository,
@@ -361,8 +413,8 @@ export async function stockPreKit(
     const preKit = await preKitRepo.findById(preKitId)
     if (!preKit) return { success: false, error: "Pre-kit not found" }
 
-    if (preKit.status !== PreKitStatus.PICKED) {
-      return { success: false, error: "Pre-kit must be in PICKED status to be stocked: current status is " + preKit.status }
+    if (preKit.status === PreKitStatus.STOCKED) {
+      return { success: false, error: "Pre-kit is already stocked" }
     }
 
     const items = await preKitRepo.getItems(preKitId)
@@ -371,7 +423,7 @@ export async function stockPreKit(
       const slot = await slotRepo.findById(item.slotId)
       if (!slot) return { success: false, error: `Slot ${item.slotId} not found` }
 
-      await slotRepo.updateSlotQuantity(item.slotId, slot.currentQuantity + item.quantity)
+      await slotRepo.setSlotQuantity(item.slotId, Math.min(slot.capacity, slot.currentQuantity + item.quantity))
 
       const transaction = InventoryTransaction.create({
         productId: item.productId,

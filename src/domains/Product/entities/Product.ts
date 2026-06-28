@@ -44,6 +44,9 @@ export class Product {
   public get reorderPoint() {
     return this.props.reorderPoint
   }
+  public get shelfLifeDays() {
+    return this.props.shelfLifeDays
+  }
   public get aliases() {
     return this.props.aliases ?? []
   }

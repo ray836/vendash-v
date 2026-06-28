@@ -64,7 +64,8 @@ export async function createOrganization(formData: FormData) {
     })
   })
 
-  redirect('/web/dashboard')
+  // New owners go to the guided setup wizard, not a blank dashboard
+  redirect('/web/setup')
 }
 
 export async function acceptInvitation(

@@ -429,6 +429,7 @@ interface VendingMachineSetupProps {
   initialSlots: PublicSlotWithProductDTO[]
   machineType: MachineType
   locations: { id: string; name: string }[]
+  onboarding?: boolean
 }
 
 export function VendingMachineSetup({
@@ -437,6 +438,7 @@ export function VendingMachineSetup({
   initialSlots,
   machineType: initialMachineType,
   locations,
+  onboarding = false,
 }: VendingMachineSetupProps) {
   // Initialize all state with basic values
   const [machine, setMachine] = useState<PublicVendingMachineDTO | null>(null)
@@ -730,11 +732,11 @@ export function VendingMachineSetup({
       <div className="flex items-center justify-between">
         <div>
           <Link
-            href={`/web/machines/${machineId}`}
+            href={onboarding ? "/web/setup" : `/web/machines/${machineId}`}
             className="flex items-center text-sm text-muted-foreground hover:text-primary mb-2"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Machine Details
+            {onboarding ? "Back to setup" : "Back to Machine Details"}
           </Link>
           <h1 className="text-2xl font-bold">
             Configure Vending Machine - {machineId}
@@ -788,6 +790,14 @@ export function VendingMachineSetup({
               <CheckCircle className="h-4 w-4 shrink-0" />
               <span className="text-sm font-medium">Configuration saved successfully</span>
             </div>
+          )}
+          {onboarding && (setupComplete || savedSuccess) && (
+            <Button asChild>
+              <Link href="/web/dashboard">
+                Finish setup
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Link>
+            </Button>
           )}
         </div>
       </div>

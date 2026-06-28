@@ -45,7 +45,8 @@ import {
   updatePreKitItems,
   getMachineTransactions,
 } from "./actions"
-import { deleteMachine } from "../actions"
+import { deleteMachine, updateMachineStatus } from "../actions"
+import { RestockCountDialog } from "./restock-count-dialog"
 import { MachineDetailDataDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
 import { PublicSlotDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
@@ -56,15 +57,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
-import { MachineType } from "@/domains/VendingMachine/entities/VendingMachine"
+import { MachineType, MachineStatus } from "@/domains/VendingMachine/entities/VendingMachine"
 import { PublicPreKitItem } from "@/domains/PreKit/schemas/PrekitSchemas"
 import { GetTransactionsForMachineResponseDTO } from "@/domains/Transaction/schemas/GetTransactionsForMachineSchema"
 import { TransactionSchemas } from "@/domains/Transaction/schemas/TransactionSchemas"
 import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
 import { SalesChart, SalesChartData } from "@/components/SalesChart"
+import { ComparisonLineChart } from "@/components/ComparisonLineChart"
 
 interface MachineDetailsProps {
   id: string
+  defaultTab?: string
 }
 
 interface PreKitItem extends PublicPreKitItem {
@@ -129,7 +132,7 @@ function useIsMobile(breakpoint = 640) {
   return isMobile
 }
 
-export default function MachineDetails({ id }: MachineDetailsProps) {
+export default function MachineDetails({ id, defaultTab = "overview" }: MachineDetailsProps) {
   const router = useRouter()
   const [machineData, setMachineData] = useState<MachineDetailDataDTO | null>(
     null
@@ -146,9 +149,11 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
     useState<GetTransactionsForMachineResponseDTO | null>(null)
   const [isLoadingSales, setIsLoadingSales] = useState(false)
   const [groupBy, setGroupBy] = useState<GroupByType>(GroupByType.DAY)
+  const [viewMode, setViewMode] = useState<"chart" | "compare">("chart")
   const isMobile = useIsMobile()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [txPage, setTxPage] = useState(1)
   const TX_PAGE_SIZE = 15
 
@@ -252,6 +257,21 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
 
   const handleSetupClick = () => {
     router.push(`/web/machines/${id}/setup`)
+  }
+
+  const handleStatusChange = async (newStatus: string) => {
+    const status = newStatus as MachineStatus
+    setIsUpdatingStatus(true)
+    try {
+      await updateMachineStatus(id, status)
+      setMachineData((prev) =>
+        prev ? { ...prev, machine: { ...prev.machine, status } } : prev
+      )
+    } catch (error) {
+      console.error("Failed to update status:", error)
+    } finally {
+      setIsUpdatingStatus(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -400,6 +420,225 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
     return isMobile ? chartData.slice(-15) : chartData
   }
 
+  function getComparisonRows() {
+    if (!salesData) return null
+
+    const rowStats = (data: SalesChartData[]) => {
+      const curr = data[data.length - 1]
+      const prev = data[data.length - 2]
+      if (!curr) return null
+      const rev = curr.sales
+      const prevRev = prev?.sales ?? null
+      const revPct = prevRev && prevRev > 0 ? Math.round(((rev - prevRev) / prevRev) * 100) : null
+      const cost = curr.cost != null && curr.cost > 0 ? curr.cost : null
+      const profit = cost !== null ? rev - cost : null
+      const prevCost = prev?.cost != null && prev.cost > 0 ? prev.cost : null
+      const prevProfit = prevCost !== null && prev ? prev.sales - prevCost : null
+      const profitPct =
+        profit !== null && prevProfit !== null && prevProfit !== 0
+          ? Math.round(((profit - prevProfit) / Math.abs(prevProfit)) * 100)
+          : null
+      const margin = profit !== null && rev > 0 ? Math.round((profit / rev) * 100) : null
+      const prevMargin = prevProfit !== null && prev && prev.sales > 0 ? Math.round((prevProfit / prev.sales) * 100) : null
+      const marginPts = margin !== null && prevMargin !== null ? margin - prevMargin : null
+      return { rev, revPct, profit, profitPct, margin, marginPts }
+    }
+
+    return {
+      day: rowStats(salesData.dailyChartData),
+      week: rowStats(salesData.weeklyChartData),
+      month: rowStats(salesData.monthlyChartData),
+    }
+  }
+
+  function getPreviousChartData(): { period: string; sales: number }[] {
+    if (!salesData) return []
+    const curr = getChartData()
+    const window = curr.length
+    if (groupBy === GroupByType.DAY) {
+      const prev = salesData.dailyChartData.slice(-(window * 2), -window)
+      return isMobile ? prev.slice(-15) : prev
+    }
+    if (groupBy === GroupByType.WEEK) {
+      const prev = salesData.weeklyChartData.slice(-(window * 2), -window)
+      return isMobile ? prev.slice(-15) : prev
+    }
+    const full = salesData.monthlyChartData
+    return full.slice(0, full.length - window)
+  }
+
+  // Stats section uses local-time transactions so the numbers always match
+  // what the user can manually count in the transaction list.
+  // (The chart bars use UTC day-bucketing from the server, which is why they differ.)
+  function getDayComparisonStats() {
+    if (!salesData) return null
+
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const toLocalDateStr = (d: Date) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+    const todayStr = toLocalDateStr(now)
+    const yest = new Date(now)
+    yest.setDate(now.getDate() - 1)
+    const yesterdayStr = toLocalDateStr(yest)
+    const nowMinutes = now.getHours() * 60 + now.getMinutes()
+
+    let todayRev = 0
+    let yestSameTimeRev = 0
+
+    for (const tx of salesData.transactions) {
+      const d = new Date(tx.createdAt)
+      const ds = toLocalDateStr(d)
+      const txMin = d.getHours() * 60 + d.getMinutes()
+      if (ds === todayStr) {
+        todayRev += Number(tx.total)
+      } else if (ds === yesterdayStr && txMin <= nowMinutes) {
+        yestSameTimeRev += Number(tx.total)
+      }
+    }
+
+    const revPct = yestSameTimeRev > 0
+      ? Math.round(((todayRev - yestSameTimeRev) / yestSameTimeRev) * 100)
+      : null
+
+    // Estimate cost using daily cost ratios from server data (best approximation available)
+    const daily = salesData.dailyChartData
+    const todayChart = daily[daily.length - 1]
+    const yestChart  = daily[daily.length - 2]
+    const todayCostRatio = todayChart?.cost && todayChart.sales > 0 ? todayChart.cost / todayChart.sales : null
+    const yestCostRatio  = yestChart?.cost  && yestChart.sales  > 0 ? yestChart.cost  / yestChart.sales  : null
+
+    const profit        = todayCostRatio !== null ? todayRev       * (1 - todayCostRatio) : null
+    const yestSameProfit = yestCostRatio !== null ? yestSameTimeRev * (1 - yestCostRatio)  : null
+
+    const profitPct = profit !== null && yestSameProfit !== null && yestSameProfit !== 0
+      ? Math.round(((profit - yestSameProfit) / Math.abs(yestSameProfit)) * 100)
+      : null
+
+    const margin     = profit       !== null && todayRev       > 0 ? Math.round((profit       / todayRev)       * 100) : null
+    const prevMargin = yestSameProfit !== null && yestSameTimeRev > 0 ? Math.round((yestSameProfit / yestSameTimeRev) * 100) : null
+    const marginPts  = margin !== null && prevMargin !== null ? margin - prevMargin : null
+
+    return { rev: todayRev, revPct, profit, profitPct, margin, marginPts }
+  }
+
+  // Compares this week's revenue so far to last week's revenue through the exact
+  // same day-of-week and time, so a partial week isn't penalised vs a complete one.
+  function getWeekComparisonStats() {
+    if (!salesData) return null
+
+    const now = new Date()
+
+    // Sunday midnight (local) = start of this week
+    const thisSunday = new Date(now)
+    thisSunday.setDate(now.getDate() - now.getDay())
+    thisSunday.setHours(0, 0, 0, 0)
+
+    const lastSunday = new Date(thisSunday)
+    lastSunday.setDate(thisSunday.getDate() - 7)
+
+    // "Same point last week" — identical offset from last Sunday
+    const msIntoWeek = now.getTime() - thisSunday.getTime()
+    const samePointLastWeek = new Date(lastSunday.getTime() + msIntoWeek)
+
+    let thisWeekRev = 0
+    let lastWeekRev = 0
+
+    for (const tx of salesData.transactions) {
+      const t = new Date(tx.createdAt).getTime()
+      if (t >= thisSunday.getTime() && t <= now.getTime())
+        thisWeekRev += Number(tx.total)
+      else if (t >= lastSunday.getTime() && t <= samePointLastWeek.getTime())
+        lastWeekRev += Number(tx.total)
+    }
+
+    const revPct = lastWeekRev > 0
+      ? Math.round(((thisWeekRev - lastWeekRev) / lastWeekRev) * 100)
+      : null
+
+    const weekly = salesData.weeklyChartData
+    const thisCostRatio = weekly[weekly.length - 1]?.cost && weekly[weekly.length - 1].sales > 0
+      ? weekly[weekly.length - 1].cost! / weekly[weekly.length - 1].sales : null
+    const lastCostRatio = weekly[weekly.length - 2]?.cost && weekly[weekly.length - 2].sales > 0
+      ? weekly[weekly.length - 2].cost! / weekly[weekly.length - 2].sales : null
+
+    const profit      = thisCostRatio !== null ? thisWeekRev * (1 - thisCostRatio) : null
+    const lastProfit  = lastCostRatio !== null ? lastWeekRev * (1 - lastCostRatio)  : null
+    const profitPct   = profit !== null && lastProfit !== null && lastProfit !== 0
+      ? Math.round(((profit - lastProfit) / Math.abs(lastProfit)) * 100) : null
+
+    const margin     = profit     !== null && thisWeekRev > 0 ? Math.round((profit    / thisWeekRev) * 100) : null
+    const prevMargin = lastProfit !== null && lastWeekRev > 0 ? Math.round((lastProfit / lastWeekRev) * 100) : null
+    const marginPts  = margin !== null && prevMargin !== null ? margin - prevMargin : null
+
+    return { rev: thisWeekRev, revPct, profit, profitPct, margin, marginPts }
+  }
+
+  // Compare mode: this week vs last week at hourly granularity (168 points, Sun–Sat).
+  // X-axis labels appear only at midnight of each day; tooltip shows the full time.
+  // Future hours → null (green line trails off); past hours with no sales → 0 (no gaps).
+  function getWeekCompareData(): { label: string; tooltipLabel: string; current: number | null; previous: number | null }[] {
+    if (!salesData) return []
+
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const hourKey = (d: Date) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}`
+    const currentHourKey = hourKey(now)
+
+    // Sunday midnight of this week (local time)
+    const thisSunday = new Date(now)
+    thisSunday.setDate(now.getDate() - now.getDay())
+    thisSunday.setHours(0, 0, 0, 0)
+
+    // Aggregate all fetched transactions by hour key
+    const salesByHour = new Map<string, number>()
+    for (const tx of salesData.transactions) {
+      const d = new Date(tx.createdAt)
+      const k = hourKey(d)
+      salesByHour.set(k, (salesByHour.get(k) ?? 0) + Number(tx.total))
+    }
+
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    const fmtHour = (h: number) =>
+      h === 0 ? "12am" : h === 12 ? "12pm" : h < 12 ? `${h}am` : `${h - 12}pm`
+
+    const result: { label: string; tooltipLabel: string; current: number | null; previous: number | null }[] = []
+
+    for (let day = 0; day < 7; day++) {
+      for (let hour = 0; hour < 24; hour++) {
+        const curr = new Date(thisSunday)
+        curr.setDate(thisSunday.getDate() + day)
+        curr.setHours(hour)
+
+        const prev = new Date(thisSunday)
+        prev.setDate(thisSunday.getDate() + day - 7)
+        prev.setHours(hour)
+
+        const ck = hourKey(curr)
+        const pk = hourKey(prev)
+
+        result.push({
+          label: hour === 0 ? dayNames[day] : "",
+          tooltipLabel: `${dayNames[day]} ${fmtHour(hour)}`,
+          current: ck > currentHourKey ? null : (salesByHour.get(ck) ?? 0),
+          previous: salesByHour.get(pk) ?? 0,
+        })
+      }
+    }
+
+    // Convert to cumulative so both lines only ever go up
+    let cumCurrent = 0
+    let cumPrevious = 0
+    return result.map((pt) => {
+      cumPrevious += pt.previous ?? 0
+      if (pt.current === null) return { ...pt, previous: cumPrevious }
+      cumCurrent += pt.current
+      return { ...pt, current: cumCurrent, previous: cumPrevious }
+    })
+  }
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -415,11 +654,31 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
             <h1 className="text-2xl font-bold tracking-tight">
               Vending Machine {machine.id}
             </h1>
-            <Badge
-              variant={machine.status === "ONLINE" ? "default" : "destructive"}
+            <Select
+              value={machine.status}
+              onValueChange={handleStatusChange}
+              disabled={isUpdatingStatus}
             >
-              {machine.status}
-            </Badge>
+              <SelectTrigger className="h-7 w-auto text-xs px-2 gap-1 border-0 shadow-none bg-transparent p-0 focus:ring-0">
+                <Badge
+                  variant={
+                    machine.status === "ONLINE"
+                      ? "default"
+                      : machine.status === "MAINTENANCE"
+                      ? "secondary"
+                      : "destructive"
+                  }
+                  className="cursor-pointer"
+                >
+                  {isUpdatingStatus ? "Saving…" : machine.status}
+                </Badge>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ONLINE">Online</SelectItem>
+                <SelectItem value="OFFLINE">Offline</SelectItem>
+                <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <p className="text-muted-foreground flex items-center">
             <MapPin className="h-4 w-4 mr-1" />
@@ -432,6 +691,9 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
             <Button size="sm" onClick={handleSetupClick}>
               Setup Machine
             </Button>
+          )}
+          {isSetup && (
+            <RestockCountDialog machineId={id} onSuccess={() => window.location.reload()} />
           )}
           {confirmingDelete ? (
             <>
@@ -534,7 +796,7 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
           */}
         </div>
 
-        <Tabs defaultValue="overview">
+        <Tabs defaultValue={defaultTab}>
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="sales">Sales</TabsTrigger>
@@ -846,32 +1108,43 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-medium">Sales Overview</h3>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full">
-                      <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-medium">Revenue Overview</h3>
+                      {viewMode === "compare" && (
+                        <p className="text-xs text-muted-foreground mt-0.5">This week vs last week — hourly, Sun through Sat</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center rounded-md border bg-muted p-0.5 text-xs">
+                        <button
+                          onClick={() => setViewMode("chart")}
+                          className={`px-2.5 py-1 rounded transition-colors ${viewMode === "chart" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          Chart
+                        </button>
+                        <button
+                          onClick={() => setViewMode("compare")}
+                          className={`px-2.5 py-1 rounded transition-colors ${viewMode === "compare" ? "bg-background shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          Compare
+                        </button>
+                      </div>
+                      {viewMode !== "compare" && (
                         <Select
                           value={groupBy}
-                          onValueChange={(value: GroupByType) =>
-                            setGroupBy(value)
-                          }
+                          onValueChange={(value: GroupByType) => setGroupBy(value)}
                         >
-                          <SelectTrigger className="w-full max-w-xs sm:max-w-[200px]">
-                            <SelectValue placeholder="Select time range" />
+                          <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Period" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value={GroupByType.DAY}>
-                              Daily
-                            </SelectItem>
-                            <SelectItem value={GroupByType.WEEK}>
-                              Weekly
-                            </SelectItem>
-                            <SelectItem value={GroupByType.MONTH}>
-                              Monthly
-                            </SelectItem>
+                            <SelectItem value={GroupByType.DAY}>Daily</SelectItem>
+                            <SelectItem value={GroupByType.WEEK}>Weekly</SelectItem>
+                            <SelectItem value={GroupByType.MONTH}>Monthly</SelectItem>
                           </SelectContent>
                         </Select>
-                      </div>
+                      )}
                     </div>
                   </div>
                   {isLoadingSales ? (
@@ -879,19 +1152,28 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
                       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                     </div>
                   ) : salesData ? (
-                    <SalesChart
-                      data={getChartData()}
-                      isMobile={isMobile}
-                      groupBy={
-                        groupBy === GroupByType.DAY
-                          ? "daily"
-                          : groupBy === GroupByType.WEEK
-                          ? "weekly"
-                          : groupBy === GroupByType.MONTH
-                          ? "monthly"
-                          : undefined
-                      }
-                    />
+                    viewMode === "compare" ? (
+                      <ComparisonLineChart
+                        data={getWeekCompareData()}
+                        currentLabel="This week"
+                        previousLabel="Last week"
+                        xInterval={24}
+                      />
+                    ) : (
+                      <SalesChart
+                        data={getChartData()}
+                        isMobile={isMobile}
+                        groupBy={
+                          groupBy === GroupByType.DAY
+                            ? "daily"
+                            : groupBy === GroupByType.WEEK
+                            ? "weekly"
+                            : groupBy === GroupByType.MONTH
+                            ? "monthly"
+                            : undefined
+                        }
+                      />
+                    )
                   ) : (
                     <div className="flex items-center justify-center h-[300px] text-muted-foreground">
                       No sales data available
@@ -901,118 +1183,223 @@ export default function MachineDetails({ id }: MachineDetailsProps) {
 
                 <Separator className="my-6" />
 
-                <div className="grid grid-cols-3 gap-4 mt-4">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Daily Average
-                    </p>
-                    <p className="text-2xl font-bold">
-                      ${salesData?.dailyAverage.toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Weekly Average
-                    </p>
-                    <p className="text-2xl font-bold">
-                      ${salesData?.weeklyAverage.toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Monthly Average
-                    </p>
-                    <p className="text-2xl font-bold">
-                      ${salesData?.monthlyAverage.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
+                {salesData && (() => {
+                  const rows = getComparisonRows()
+                  const hasCostAny = salesData.dailyChartData.some((d) => d.cost != null && d.cost > 0)
+                  const chip = (pct: number | null, pts = false) => {
+                    if (pct === null) return null
+                    const up = pct >= 0
+                    return (
+                      <span className={`ml-1.5 text-xs font-medium ${up ? "text-green-600" : "text-red-500"}`}>
+                        {up ? "↑" : "↓"}{Math.abs(pct)}{pts ? "pp" : "%"}
+                      </span>
+                    )
+                  }
+                  const marginColor = (m: number | null) =>
+                    m === null ? "" : m >= 30 ? "text-green-600" : m >= 15 ? "text-yellow-600" : "text-red-600"
+                  const now = new Date()
+                  const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+                  const activeData =
+                    groupBy === GroupByType.DAY  ? getDayComparisonStats()  :
+                    groupBy === GroupByType.WEEK ? getWeekComparisonStats() :
+                    rows?.month
+                  const periodLabel =
+                    groupBy === GroupByType.DAY  ? `vs yesterday at ${timeStr}` :
+                    groupBy === GroupByType.WEEK ? `vs last week ${dayNames[now.getDay()]} ${timeStr}` :
+                    "vs last month"
+                  return (
+                    <div className="grid grid-cols-3 gap-6">
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Revenue</p>
+                        <p className="text-2xl font-bold">{activeData ? `$${activeData.rev.toFixed(2)}` : "—"}</p>
+                        {activeData && <p className="text-xs text-muted-foreground">{chip(activeData.revPct)} <span className="text-muted-foreground">{periodLabel}</span></p>}
+                      </div>
+                      {hasCostAny && (
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">Est. Profit</p>
+                          <p className="text-2xl font-bold">{activeData?.profit != null ? `$${activeData.profit.toFixed(2)}` : "—"}</p>
+                          {activeData && <p className="text-xs text-muted-foreground">{chip(activeData.profitPct)} <span className="text-muted-foreground">{periodLabel}</span></p>}
+                        </div>
+                      )}
+                      {hasCostAny && (
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">Margin</p>
+                          <p className={`text-2xl font-bold ${marginColor(activeData?.margin ?? null)}`}>
+                            {activeData?.margin != null ? `${activeData.margin}%` : "—"}
+                          </p>
+                          {activeData && <p className="text-xs text-muted-foreground">{chip(activeData.marginPts, true)} <span className="text-muted-foreground">{periodLabel}</span></p>}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 <Separator className="my-6" />
 
-                <div>
-                  <h3 className="text-base font-semibold mb-3">
-                    Transactions
-                    {salesData && (
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        ({salesData.transactions.length} in last 90 days)
-                      </span>
-                    )}
-                  </h3>
-                  {!salesData || salesData.transactions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">No transactions found</p>
-                  ) : (() => {
-                    const sorted = [...salesData.transactions].sort(
-                      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                    )
-                    const totalPages = Math.ceil(sorted.length / TX_PAGE_SIZE)
-                    const paginated = sorted.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE)
-                    return (
-                      <>
-                        <div className="rounded-md border overflow-hidden">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b bg-muted/50">
-                                <th className="text-left px-4 py-2 font-medium text-muted-foreground">Date & Time</th>
-                                <th className="text-left px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Type</th>
-                                <th className="text-left px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Card</th>
-                                <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {paginated.map((tx) => (
-                                <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                                  <td className="px-4 py-3 text-muted-foreground">
-                                    {new Intl.DateTimeFormat("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    }).format(new Date(tx.createdAt))}
-                                  </td>
-                                  <td className="px-4 py-3 hidden sm:table-cell capitalize text-muted-foreground">
-                                    {tx.transactionType?.toLowerCase() ?? "—"}
-                                  </td>
-                                  <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground">
-                                    {tx.last4CardDigits ? `•••• ${tx.last4CardDigits}` : "—"}
-                                  </td>
-                                  <td className="px-4 py-3 text-right font-medium">
-                                    ${Number(tx.total).toFixed(2)}
-                                  </td>
+                <Tabs defaultValue="transactions">
+                  <TabsList className="mb-4">
+                    <TabsTrigger value="transactions">
+                      Transactions
+                      {salesData && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">({salesData.transactions.length})</span>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="products">Product Performance</TabsTrigger>
+                  </TabsList>
+
+                  {/* Transactions tab */}
+                  <TabsContent value="transactions">
+                    {!salesData || salesData.transactions.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4 text-center">No transactions found</p>
+                    ) : (() => {
+                      const sorted = [...salesData.transactions].sort(
+                        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                      )
+                      const totalPages = Math.ceil(sorted.length / TX_PAGE_SIZE)
+                      const paginated = sorted.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE)
+                      return (
+                        <>
+                          <div className="rounded-md border overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b bg-muted/50">
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Date & Time</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Type</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Card</th>
+                                  <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {totalPages > 1 && (
-                          <div className="flex items-center justify-between mt-3">
-                            <p className="text-sm text-muted-foreground">
-                              Page {txPage} of {totalPages}
-                            </p>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={txPage === 1}
-                                onClick={() => setTxPage((p) => p - 1)}
-                              >
-                                Previous
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={txPage === totalPages}
-                                onClick={() => setTxPage((p) => p + 1)}
-                              >
-                                Next
-                              </Button>
+                              </thead>
+                              <tbody>
+                                {paginated.map((tx) => (
+                                  <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                                    <td className="px-4 py-3 text-muted-foreground">
+                                      {new Intl.DateTimeFormat("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      }).format(new Date(tx.createdAt))}
+                                    </td>
+                                    <td className="px-4 py-3 hidden sm:table-cell capitalize text-muted-foreground">
+                                      {tx.transactionType?.toLowerCase() ?? "—"}
+                                    </td>
+                                    <td className="px-4 py-3 hidden sm:table-cell text-muted-foreground">
+                                      {tx.last4CardDigits ? `•••• ${tx.last4CardDigits}` : "—"}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-medium">
+                                      ${Number(tx.total).toFixed(2)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          {totalPages > 1 && (
+                            <div className="flex items-center justify-between mt-3">
+                              <p className="text-sm text-muted-foreground">
+                                Page {txPage} of {totalPages}
+                              </p>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={txPage === 1}
+                                  onClick={() => setTxPage((p) => p - 1)}
+                                >
+                                  Previous
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={txPage === totalPages}
+                                  onClick={() => setTxPage((p) => p + 1)}
+                                >
+                                  Next
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </TabsContent>
+
+                  {/* Product performance tab */}
+                  <TabsContent value="products">
+                    {!salesData || salesData.productPerformance.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4 text-center">
+                        No product data — transactions may not have item-level detail yet
+                      </p>
+                    ) : (() => {
+                      const perf = salesData.productPerformance
+                      const hasCostData = perf.some((p) => p.profit !== null)
+                      const best = perf[0]
+                      const worst = perf[perf.length - 1]
+                      return (
+                        <>
+                          {/* Best / Worst callouts */}
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-3">
+                              <p className="text-xs text-muted-foreground mb-0.5">Best performer</p>
+                              <p className="font-semibold text-sm text-green-600 truncate">{best.productName}</p>
+                              <p className="text-xs text-muted-foreground">${best.revenue.toFixed(2)} · {best.unitsSold} units</p>
+                            </div>
+                            <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
+                              <p className="text-xs text-muted-foreground mb-0.5">Lowest revenue</p>
+                              <p className="font-semibold text-sm text-red-500 truncate">{worst.productName}</p>
+                              <p className="text-xs text-muted-foreground">${worst.revenue.toFixed(2)} · {worst.unitsSold} units</p>
                             </div>
                           </div>
-                        )}
-                      </>
-                    )
-                  })()}
-                </div>
+                          <div className="rounded-md border overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b bg-muted/50">
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground w-6">#</th>
+                                  <th className="text-left px-4 py-2 font-medium text-muted-foreground">Product</th>
+                                  <th className="text-right px-4 py-2 font-medium text-muted-foreground">Units</th>
+                                  <th className="text-right px-4 py-2 font-medium text-muted-foreground">Revenue</th>
+                                  {hasCostData && <th className="text-right px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Est. Profit</th>}
+                                  {hasCostData && <th className="text-right px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Margin</th>}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {perf.map((p, i) => {
+                                  const marginColor =
+                                    p.margin === null ? "text-muted-foreground"
+                                    : p.margin >= 30 ? "text-green-600"
+                                    : p.margin >= 15 ? "text-yellow-600"
+                                    : "text-red-500"
+                                  const isBest = i === 0
+                                  const isWorst = i === perf.length - 1
+                                  return (
+                                    <tr key={p.productId} className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${isBest ? "bg-green-500/5" : isWorst ? "bg-red-500/5" : ""}`}>
+                                      <td className="px-4 py-3 text-muted-foreground text-xs">{i + 1}</td>
+                                      <td className="px-4 py-3 font-medium">{p.productName}</td>
+                                      <td className="px-4 py-3 text-right text-muted-foreground">{p.unitsSold}</td>
+                                      <td className="px-4 py-3 text-right font-medium">${p.revenue.toFixed(2)}</td>
+                                      {hasCostData && (
+                                        <td className="px-4 py-3 text-right hidden sm:table-cell">
+                                          {p.profit !== null ? `$${p.profit.toFixed(2)}` : "—"}
+                                        </td>
+                                      )}
+                                      {hasCostData && (
+                                        <td className={`px-4 py-3 text-right font-medium hidden sm:table-cell ${marginColor}`}>
+                                          {p.margin !== null ? `${p.margin}%` : "—"}
+                                        </td>
+                                      )}
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">Last 90 days · sorted by revenue</p>
+                        </>
+                      )
+                    })()}
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </TabsContent>

@@ -1,7 +1,17 @@
 import { z } from "zod"
 import { TransactionSchemas } from "./TransactionSchemas"
 
-const chartDataPoint = z.object({ period: z.string(), sales: z.number() })
+const chartDataPoint = z.object({ period: z.string(), sales: z.number(), cost: z.number().optional() })
+
+const productPerformanceItem = z.object({
+  productId: z.string(),
+  productName: z.string(),
+  unitsSold: z.number(),
+  revenue: z.number(),
+  cost: z.number().nullable(),
+  profit: z.number().nullable(),
+  margin: z.number().nullable(),
+})
 
 const response = z.object({
   transactions: z.array(TransactionSchemas.public),
@@ -14,6 +24,7 @@ const response = z.object({
   dailyChartData: z.array(chartDataPoint),
   weeklyChartData: z.array(chartDataPoint),
   monthlyChartData: z.array(chartDataPoint),
+  productPerformance: z.array(productPerformanceItem),
 })
 
 export const GetTransactionsForMachineSchema = {

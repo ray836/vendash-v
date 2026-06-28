@@ -12,7 +12,6 @@ import {
   ShoppingCart,
   DollarSign,
   ClipboardList,
-  MapPin,
   Users,
 } from "lucide-react"
 
@@ -22,7 +21,6 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useRole } from "@/lib/role-context"
 import { UserRole } from "@/domains/User/entities/User"
 
-const ALL_ROLES = [UserRole.ADMIN, UserRole.OPERATOR, UserRole.DRIVER]
 const ADMIN_OPERATOR = [UserRole.ADMIN, UserRole.OPERATOR]
 
 const navItems = [
@@ -33,27 +31,21 @@ const navItems = [
     roles: ADMIN_OPERATOR,
   },
   {
-    title: "Machines",
+    title: "My Machines",
     href: "/web/machines",
     icon: Truck,
-    roles: ALL_ROLES,
-  },
-  {
-    title: "Routes",
-    href: "/web/routes",
-    icon: MapPin,
-    roles: ALL_ROLES,
+    roles: ADMIN_OPERATOR,
   },
   {
     title: "Products",
     href: "/web/products",
     icon: Package,
-    roles: ALL_ROLES,
+    roles: ADMIN_OPERATOR,
   },
   {
-    title: "Orders",
-    href: "/web/orders",
-    icon: ShoppingCart,
+    title: "Restock",
+    href: "/web/restock",
+    icon: ClipboardList,
     roles: ADMIN_OPERATOR,
   },
   {
@@ -63,10 +55,10 @@ const navItems = [
     roles: ADMIN_OPERATOR,
   },
   {
-    title: "Pre-kits",
-    href: "/web/prekits",
-    icon: ClipboardList,
-    roles: ALL_ROLES,
+    title: "Orders",
+    href: "/web/orders",
+    icon: ShoppingCart,
+    roles: ADMIN_OPERATOR,
   },
   {
     title: "Team",

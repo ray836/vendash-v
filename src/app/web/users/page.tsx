@@ -34,9 +34,9 @@ import { useRole } from "@/lib/role-context"
 import { AccessGuard } from "@/components/access-guard"
 
 const ROLE_LABELS: Record<string, string> = {
-  [UserRole.OPERATOR]: "Operator",
+  [UserRole.OPERATOR]: "Staff",
   [UserRole.ADMIN]: "Admin",
-  [UserRole.DRIVER]: "Driver",
+  [UserRole.DRIVER]: "Staff",
 }
 
 export default function UsersPage() {
@@ -50,7 +50,7 @@ export default function UsersPage() {
   const [pendingDeleteUser, setPendingDeleteUser] = useState<PublicUserDTO | null>(null)
   const [isInviteOpen, setIsInviteOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRole, setInviteRole] = useState<UserRole>(UserRole.DRIVER)
+  const [inviteRole, setInviteRole] = useState<UserRole>(UserRole.OPERATOR)
   const [isInviting, setIsInviting] = useState(false)
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [inviteSent, setInviteSent] = useState(false)
@@ -123,7 +123,7 @@ export default function UsersPage() {
   const handleCloseInvite = () => {
     setIsInviteOpen(false)
     setInviteEmail("")
-    setInviteRole(UserRole.DRIVER)
+    setInviteRole(UserRole.OPERATOR)
     setInviteUrl(null)
     setInviteSent(false)
   }
@@ -159,9 +159,8 @@ export default function UsersPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={UserRole.OPERATOR}>Operator</SelectItem>
+                        <SelectItem value={UserRole.OPERATOR}>Staff</SelectItem>
                         <SelectItem value={UserRole.ADMIN}>Admin</SelectItem>
-                        <SelectItem value={UserRole.DRIVER}>Driver</SelectItem>
                       </SelectContent>
                     </Select>
                   ) : (
@@ -245,9 +244,8 @@ export default function UsersPage() {
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={UserRole.OPERATOR}>Operator</SelectItem>
+                      <SelectItem value={UserRole.OPERATOR}>Staff</SelectItem>
                       <SelectItem value={UserRole.ADMIN}>Admin</SelectItem>
-                      <SelectItem value={UserRole.DRIVER}>Driver</SelectItem>
                     </SelectContent>
                   </Select>
                 </TableCell>
@@ -278,7 +276,7 @@ export default function UsersPage() {
       </div>
 
       <Dialog open={isInviteOpen} onOpenChange={(open) => { if (!open) handleCloseInvite() }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {inviteSent ? "Invite sent" : "Invite team member"}
@@ -332,8 +330,7 @@ export default function UsersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={UserRole.DRIVER}>Driver</SelectItem>
-                    <SelectItem value={UserRole.OPERATOR}>Operator</SelectItem>
+                    <SelectItem value={UserRole.OPERATOR}>Staff</SelectItem>
                     <SelectItem value={UserRole.ADMIN}>Admin</SelectItem>
                   </SelectContent>
                 </Select>
@@ -358,7 +355,7 @@ export default function UsersPage() {
       </Dialog>
 
       <Dialog open={!!pendingDeleteUser} onOpenChange={(open) => !open && setPendingDeleteUser(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Delete team member?</DialogTitle>
             <DialogDescription>

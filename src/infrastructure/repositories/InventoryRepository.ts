@@ -42,6 +42,40 @@ export class InventoryRepository {
     }
   }
 
+  /**
+   * Apply a restock reconciliation for one product: `added` units moved from
+   * storage into the machine, `sold` units consumed out of the machine.
+   * Net effect: storage -= added, machines += (added - sold).
+   */
+  async applyReconciliation(
+    productId: string,
+    added: number,
+    sold: number,
+    organizationId: string
+  ): Promise<void> {
+    const machinesDelta = added - sold
+    const existingInventory = await this.database.query.inventory.findFirst({
+      where: eq(inventory.productId, productId),
+    })
+
+    if (!existingInventory) {
+      await this.database.insert(inventory).values({
+        productId,
+        storage: -added,
+        machines: machinesDelta,
+        organizationId,
+      })
+    } else {
+      await this.database
+        .update(inventory)
+        .set({
+          storage: sql`${inventory.storage} - ${added}`,
+          machines: sql`${inventory.machines} + ${machinesDelta}`,
+        })
+        .where(eq(inventory.productId, productId))
+    }
+  }
+
   async transferStorageToMachines(productId: string, quantity: number, organizationId: string): Promise<void> {
     const existingInventory = await this.database.query.inventory.findFirst({
       where: eq(inventory.productId, productId),

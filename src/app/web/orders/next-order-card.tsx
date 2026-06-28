@@ -1,6 +1,7 @@
 "use client"
 
-import { CalendarClock } from "lucide-react"
+import { CalendarClock, AlertTriangle, ArrowRight } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,13 +15,17 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { OrderItem } from "./order-item"
 import { AddProductDialog } from "./add-product-dialog"
+import { RestockSuggestionsDialog } from "./restock-suggestions-dialog"
 import { useState, useEffect } from "react"
 import {
   getCurrentOrder,
   updateOrderItemQuantity,
   placeCurrentOrder,
   removeOrderItem,
+  getUnorderedRestockCount,
+  getOrderItemsContext,
 } from "./actions"
+import type { OrderItemContext } from "./order-item"
 import { toast } from "@/hooks/use-toast"
 import {
   PublicOrderItemResponseDTO,
@@ -37,19 +42,29 @@ export function NextOrderCard({ nextOrderDate, onOrderPlaced }: NextOrderCardPro
   const [items, setItems] = useState<PublicOrderItemResponseDTO[]>([])
   const [order, setOrder] = useState<PublicOrderDTO | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false)
+  const [unorderedCount, setUnorderedCount] = useState(0)
+  const [itemContext, setItemContext] = useState<Record<string, OrderItemContext>>({})
 
   const fetchCurrentOrder = async () => {
     try {
       setIsLoading(true)
-      const result = await getCurrentOrder()
-      if (result.success && result.order) {
-        setOrder(result.order)
-        setItems(result.order.orderItems)
+      const [orderResult, countResult] = await Promise.all([
+        getCurrentOrder(),
+        getUnorderedRestockCount(),
+      ])
+      if (orderResult.success && orderResult.order) {
+        setOrder(orderResult.order)
+        setItems(orderResult.order.orderItems)
+        const productIds = orderResult.order.orderItems.map((i) => i.product.id)
+        const ctxResult = await getOrderItemsContext(productIds)
+        if (ctxResult.success) setItemContext(ctxResult.context)
       } else {
-        // No current order found (e.g., after placing an order)
         setOrder(null)
         setItems([])
+        setItemContext({})
       }
+      if (countResult.success) setUnorderedCount(countResult.unorderedCount)
     } catch (err: unknown) {
       console.error("Failed to fetch current order:", err)
       toast({
@@ -190,7 +205,36 @@ export function NextOrderCard({ nextOrderDate, onOrderPlaced }: NextOrderCardPro
   }
 
   if (isLoading) {
-    return <div>Loading order...</div> // You might want to use a proper loading component
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-36" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-28" />
+              <Skeleton className="h-9 w-32" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-2">
+                <Skeleton className="h-12 w-12 rounded-md flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <Skeleton className="h-8 w-20" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -219,6 +263,23 @@ export function NextOrderCard({ nextOrderDate, onOrderPlaced }: NextOrderCardPro
           </div>
         </div>
       </CardHeader>
+      {unorderedCount > 0 && (
+        <div className="flex items-center justify-between gap-3 mx-6 mb-4 rounded-md border border-amber-800/40 bg-amber-950/40 px-4 py-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+            <p className="text-sm text-amber-400 font-medium">
+              {unorderedCount} product{unorderedCount !== 1 ? "s" : ""} need{unorderedCount === 1 ? "s" : ""} ordering based on your current inventory
+            </p>
+          </div>
+          <button
+            onClick={() => setIsSuggestionsOpen(true)}
+            className="text-sm text-amber-400 hover:text-amber-300 flex items-center gap-1 flex-shrink-0 font-medium transition-colors"
+          >
+            Add Missing <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <CardContent>
         <div className="space-y-4">
           {items.length === 0 ? (
@@ -252,6 +313,7 @@ export function NextOrderCard({ nextOrderDate, onOrderPlaced }: NextOrderCardPro
                   <OrderItem
                     key={item.id}
                     item={item}
+                    context={itemContext[item.product.id]}
                     onQuantityChange={handleQuantityChange}
                     onRemove={() => handleRemoveItem(item.id)}
                   />
@@ -270,6 +332,12 @@ export function NextOrderCard({ nextOrderDate, onOrderPlaced }: NextOrderCardPro
           <Button onClick={handlePlaceOrder}>Place Order</Button>
         </CardFooter>
       )}
+
+      <RestockSuggestionsDialog
+        open={isSuggestionsOpen}
+        onOpenChange={setIsSuggestionsOpen}
+        onSuccess={fetchCurrentOrder}
+      />
     </Card>
   )
 }

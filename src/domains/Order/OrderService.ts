@@ -132,6 +132,34 @@ export async function addItemToCurrentOrder(
   return OrderItemDTOToPublicOrderItemResponseDTO(orderItem, product)
 }
 
+// Merges all orphaned draft orders into the oldest draft, then deletes them.
+// Guards against the race condition where parallel inserts create multiple drafts.
+export async function consolidateDraftOrders(
+  orderRepo: OrderRepository,
+  productRepo: ProductRepository,
+  organizationId: string,
+  userId: string
+): Promise<void> {
+  const allDrafts = await orderRepo.findAllDraftOrdersByOrganizationId(organizationId)
+  if (allDrafts.length <= 1) return
+
+  const [primary, ...orphans] = allDrafts
+  for (const orphan of orphans) {
+    const items = await orderRepo.findOrderItems(orphan.id)
+    for (const item of items) {
+      await addItemToCurrentOrder(orderRepo, productRepo, {
+        organizationId,
+        productId: item.productId,
+        quantity: item.quantity,
+        userId,
+        orderId: primary.id,
+      })
+    }
+    await orderRepo.deleteOrderItemsByOrderId(orphan.id)
+    await orderRepo.delete(orphan.id)
+  }
+}
+
 export async function updateOrderItemQuantity(
   orderRepo: OrderRepository,
   request: UpdateOrderItemQuantityRequest

@@ -1,6 +1,7 @@
 import { Product } from "./entities/Product"
 import { ProductRepository } from "@/infrastructure/repositories/ProductRepository"
 import { PublicProductDTO, PublicProductWithInventorySalesOrderDataDTO } from "./schemas/ProductSchemas"
+import { weightedAvgDailySales } from "@/domains/Inventory/inventoryForecast"
 
 export async function getOrgProducts(
   repo: ProductRepository,
@@ -36,16 +37,9 @@ export async function getOrgProductDataMetrics(
   )
 
   return products.map((product) => {
-    const totalSales = product.transactions.length
-    const totalRevenue = product.transactions.reduce(
-      (sum, t) => sum + t.quantity * t.salePrice,
-      0
-    )
-    const totalUnitsSold = product.transactions.reduce(
-      (sum, t) => sum + t.quantity,
-      0
-    )
-    const averageDailySales = totalUnitsSold / 30
+    const { totalSales, totalUnitsSold, totalRevenue, unitsSold7, unitsSold35 } = product.salesAgg
+    // Same weighted velocity the ordering logic uses, so "Days Left" matches reorder alerts
+    const averageDailySales = weightedAvgDailySales(unitsSold7, unitsSold35)
     const salesVelocity = averageDailySales
     const currentInventory =
       (product.inventory.storage || 0) + (product.inventory.machines || 0)
@@ -53,7 +47,6 @@ export async function getOrgProductDataMetrics(
       currentInventory > 0 && averageDailySales > 0
         ? currentInventory / averageDailySales
         : 0
-    const trend = calculateTrend(product.transactions)
 
     return {
       product: {
@@ -85,7 +78,7 @@ export async function getOrgProductDataMetrics(
         averageDailySales,
         salesVelocity,
         daysToSellOut,
-        trend,
+        trend: 0,
       },
       orderStatus: {
         shouldOrder: shouldOrder(currentInventory, averageDailySales),
@@ -123,23 +116,9 @@ export async function deleteProduct(
   await repo.delete(id)
 }
 
-function calculateTrend(
-  transactions: Array<{ quantity: number; salePrice: number }>
-): number {
-  if (transactions.length < 2) return 0
-  const totals = transactions.map((t) => t.quantity * t.salePrice)
-  const n = totals.length
-  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0
-  totals.forEach((total, index) => {
-    sumX += index
-    sumY += total
-    sumXY += index * total
-    sumXX += index * index
-  })
-  return (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX)
-}
 
 function shouldOrder(currentInventory: number, averageDailySales: number): boolean {
   const daysOfInventory = currentInventory / averageDailySales
-  return daysOfInventory < 7
+  // 7-day lead time: order when stock won't last until an order could arrive
+  return daysOfInventory < 14
 }

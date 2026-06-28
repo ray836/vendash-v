@@ -9,7 +9,7 @@ import {
   transactions,
 } from "@/infrastructure/database/schema"
 import { db } from "@/infrastructure/database"
-import { eq, sql, and, gte, lte } from "drizzle-orm"
+import { eq, sql, and, gte, lte, isNotNull } from "drizzle-orm"
 import { randomUUID } from "node:crypto"
 
 export class ProductRepository {
@@ -20,12 +20,43 @@ export class ProductRepository {
     salesStartDate: Date,
     salesEndDate: Date
   ): Promise<ProductWithInventorySalesOrderDataDTO[]> {
-    const productsResult = await this.database
+    // Recent windows for weighted velocity (computed inside the same aggregate)
+    const start7Days = new Date(salesEndDate.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const start35Days = new Date(salesEndDate.getTime() - 35 * 24 * 60 * 60 * 1000)
+
+    // Aggregate all transaction data in SQL — returns 1 row per product instead of 1 row per sale
+    const salesAgg = this.database
+      .select({
+        productId: transactionItems.productId,
+        totalSales: sql<number>`cast(count(*) as int)`.as('total_sales'),
+        totalUnitsSold: sql<number>`cast(coalesce(sum(${transactionItems.quantity}), 0) as int)`.as('total_units_sold'),
+        totalRevenue: sql<number>`coalesce(sum(${transactionItems.quantity} * cast(${transactionItems.salePrice} as numeric)), 0)`.as('total_revenue'),
+        unitsSold7: sql<number>`cast(coalesce(sum(${transactionItems.quantity}) filter (where ${transactions.createdAt} >= ${start7Days}), 0) as int)`.as('units_sold_7'),
+        unitsSold35: sql<number>`cast(coalesce(sum(${transactionItems.quantity}) filter (where ${transactions.createdAt} >= ${start35Days}), 0) as int)`.as('units_sold_35'),
+      })
+      .from(transactionItems)
+      .innerJoin(
+        transactions,
+        and(
+          eq(transactionItems.transactionId, transactions.id),
+          eq(transactions.organizationId, organizationId),
+          gte(transactions.createdAt, salesStartDate),
+          lte(transactions.createdAt, salesEndDate)
+        )
+      )
+      .where(isNotNull(transactionItems.productId))
+      .groupBy(transactionItems.productId)
+      .as('sales_agg')
+
+    const rows = await this.database
       .select({
         product: products,
         inventory: inventory,
-        transactionItem: transactionItems,
-        transaction: transactions,
+        totalSales: salesAgg.totalSales,
+        totalUnitsSold: salesAgg.totalUnitsSold,
+        totalRevenue: salesAgg.totalRevenue,
+        unitsSold7: salesAgg.unitsSold7,
+        unitsSold35: salesAgg.unitsSold35,
         isOnNextOrder: sql<boolean>`exists (
           select 1 from ${orders} o
           join ${orderItems} oi on o.id = oi.order_id
@@ -34,73 +65,45 @@ export class ProductRepository {
         )`,
       })
       .from(products)
-      .leftJoin(inventory, eq(products.id, inventory.productId))
-      .leftJoin(transactionItems, eq(products.id, transactionItems.productId))
-      .leftJoin(
-        transactions,
-        and(
-          eq(transactionItems.transactionId, transactions.id),
-          gte(transactions.createdAt, salesStartDate),
-          lte(transactions.createdAt, salesEndDate)
-        )
-      )
+      .leftJoin(inventory, and(eq(products.id, inventory.productId), eq(inventory.organizationId, organizationId)))
+      .leftJoin(salesAgg, eq(products.id, salesAgg.productId))
       .where(eq(products.organizationId, organizationId))
 
-    const productMap = new Map<string, ProductWithInventorySalesOrderDataDTO>()
-
-    for (const row of productsResult) {
-      const productId = row.product.id
-
-      if (!productMap.has(productId)) {
-        productMap.set(productId, {
-          product: {
-            id: row.product.id,
-            name: row.product.name,
-            recommendedPrice: parseFloat(row.product.recommendedPrice.toString()),
-            category: row.product.category,
-            image: row.product.image,
-            vendorLink: row.product.vendorLink,
-            caseCost: parseFloat(row.product.caseCost.toString()),
-            caseSize: parseFloat(row.product.caseSize.toString()),
-            shippingAvailable: row.product.shippingAvailable,
-            shippingTimeInDays: row.product.shippingTimeInDays,
-            aliases: row.product.aliases ?? [],
-            organizationId: row.product.organizationId,
-            createdAt: row.product.createdAt,
-            updatedAt: row.product.updatedAt,
-          },
-          inventory: row.inventory
-            ? {
-                productId: row.inventory.productId,
-                storage: row.inventory.storage,
-                machines: row.inventory.machines,
-                organizationId: row.inventory.organizationId,
-              }
-            : {
-                productId,
-                storage: 0,
-                machines: 0,
-                organizationId,
-              },
-          transactions: [],
-          OnNextOrder: row.isOnNextOrder,
-        } as ProductWithInventorySalesOrderDataDTO)
-      }
-
-      if (row.transactionItem && row.transaction) {
-        const productData = productMap.get(productId)!
-        productData.transactions.push({
-          id: row.transactionItem.id,
-          transactionId: row.transactionItem.transactionId,
-          productId: row.transactionItem.productId ?? '',
-          quantity: row.transactionItem.quantity,
-          salePrice: parseFloat(row.transactionItem.salePrice.toString()),
-          slotCode: row.transactionItem.slotCode,
-        })
-      }
-    }
-
-    return Array.from(productMap.values())
+    return rows.map((row) => ({
+      product: {
+        id: row.product.id,
+        name: row.product.name,
+        recommendedPrice: parseFloat(row.product.recommendedPrice.toString()),
+        category: row.product.category,
+        image: row.product.image,
+        vendorLink: row.product.vendorLink,
+        caseCost: parseFloat(row.product.caseCost.toString()),
+        caseSize: parseFloat(row.product.caseSize.toString()),
+        shippingAvailable: row.product.shippingAvailable,
+        shippingTimeInDays: row.product.shippingTimeInDays,
+        shelfLifeDays: row.product.shelfLifeDays ?? undefined,
+        aliases: row.product.aliases ?? [],
+        organizationId: row.product.organizationId,
+        createdAt: row.product.createdAt,
+        updatedAt: row.product.updatedAt,
+      },
+      inventory: row.inventory
+        ? {
+            productId: row.inventory.productId,
+            storage: row.inventory.storage,
+            machines: row.inventory.machines,
+            organizationId: row.inventory.organizationId,
+          }
+        : { productId: row.product.id, storage: 0, machines: 0, organizationId },
+      salesAgg: {
+        totalSales: row.totalSales ?? 0,
+        totalUnitsSold: row.totalUnitsSold ?? 0,
+        totalRevenue: parseFloat(String(row.totalRevenue ?? '0')),
+        unitsSold7: row.unitsSold7 ?? 0,
+        unitsSold35: row.unitsSold35 ?? 0,
+      },
+      OnNextOrder: row.isOnNextOrder,
+    }))
   }
 
   async findByOrganizationId(organizationId: string): Promise<Product[]> {
@@ -147,6 +150,7 @@ export class ProductRepository {
         shippingAvailable: product.shippingAvailable,
         shippingTimeInDays: product.shippingTimeInDays,
         reorderPoint: product.reorderPoint ?? null,
+        shelfLifeDays: product.shelfLifeDays ?? null,
         aliases: product.aliases ?? [],
         organizationId: product.organizationId,
         createdAt: new Date(),
@@ -175,6 +179,7 @@ export class ProductRepository {
         shippingAvailable: product.shippingAvailable,
         shippingTimeInDays: product.shippingTimeInDays,
         reorderPoint: product.reorderPoint ?? null,
+        shelfLifeDays: product.shelfLifeDays ?? null,
         aliases: product.aliases ?? [],
         updatedAt: new Date(),
       })
@@ -205,6 +210,7 @@ export class ProductRepository {
       shippingAvailable: row.shippingAvailable,
       shippingTimeInDays: row.shippingTimeInDays,
       reorderPoint: row.reorderPoint ?? undefined,
+      shelfLifeDays: row.shelfLifeDays ?? undefined,
       aliases: row.aliases ?? [],
       organizationId: row.organizationId,
       createdAt: row.createdAt,

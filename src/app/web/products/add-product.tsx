@@ -26,8 +26,17 @@ import { createProduct } from "./actions"
 import { useToast } from "@/hooks/use-toast"
 import { useSession } from "@/lib/use-session"
 
-const CATEGORIES = ["cookies", "chips", "drink", "candy", "snack"] as const
+const CATEGORIES = ["cookies", "chips", "drink", "candy", "snack", "pastry"] as const
 type Category = (typeof CATEGORIES)[number]
+
+const SHELF_LIFE_DEFAULTS: Record<Category, number> = {
+  pastry: 7,
+  chips: 90,
+  snack: 90,
+  drink: 90,
+  cookies: 180,
+  candy: 365,
+}
 
 interface ProductFormData {
   name: string
@@ -39,6 +48,7 @@ interface ProductFormData {
   caseCost: number
   caseSize: number
   shippingAvailable: boolean
+  shelfLifeDays: number
 }
 
 const initialFormData: ProductFormData = {
@@ -51,6 +61,7 @@ const initialFormData: ProductFormData = {
   caseCost: 0,
   caseSize: 0,
   shippingAvailable: true,
+  shelfLifeDays: SHELF_LIFE_DEFAULTS["snack"],
 }
 
 interface AddProductDialogProps {
@@ -144,7 +155,10 @@ export function AddProductDialog({ onSuccess }: AddProductDialogProps) {
     setIsLoading(true)
 
     try {
-      await createProduct(formData)
+      await createProduct({
+        ...formData,
+        shelfLifeDays: formData.shelfLifeDays > 0 ? formData.shelfLifeDays : undefined,
+      })
 
       setIsOpen(false)
       setFormData(initialFormData)
@@ -280,7 +294,11 @@ export function AddProductDialog({ onSuccess }: AddProductDialogProps) {
             <Select
               value={formData.category}
               onValueChange={(value: Category) =>
-                setFormData((prev) => ({ ...prev, category: value }))
+                setFormData((prev) => ({
+                  ...prev,
+                  category: value,
+                  shelfLifeDays: SHELF_LIFE_DEFAULTS[value],
+                }))
               }
             >
               <SelectTrigger>
@@ -382,6 +400,25 @@ export function AddProductDialog({ onSuccess }: AddProductDialogProps) {
                 }))
               }
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="shelfLifeDays">Shelf Life (days)</Label>
+            <Input
+              id="shelfLifeDays"
+              type="number"
+              min="1"
+              value={formData.shelfLifeDays}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  shelfLifeDays: parseInt(e.target.value) || 0,
+                }))
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Pre-filled based on category. Used to prevent over-ordering perishables.
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

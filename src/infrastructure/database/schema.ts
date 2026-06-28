@@ -9,6 +9,7 @@ import {
   primaryKey,
   jsonb,
   real,
+  index,
 } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm"
 
@@ -42,7 +43,6 @@ export const slots = pgTable("slots", {
     .references(() => products.id),
   organizationId: text("organization_id")
     .references(() => organizations.id)
-    .default("1")
     .notNull(),
   labelCode: text("label_code").notNull(),
   rowKey: text("row_key"),
@@ -64,6 +64,8 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   address: text("address"),
   apiKey: text("api_key"),
+  notificationEmail: text("notification_email"),
+  lastOrderEmailSentAt: timestamp("last_order_email_sent_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 })
 
@@ -119,6 +121,7 @@ export const products = pgTable("products", {
   shippingAvailable: boolean("shipping_available").notNull(),
   shippingTimeInDays: integer("shipping_time_in_days").notNull(),
   reorderPoint: integer("reorder_point"),
+  shelfLifeDays: integer("shelf_life_days"),
   aliases: text("aliases").array(),
   organizationId: text("organization_id")
     .references(() => organizations.id)
@@ -157,7 +160,9 @@ export const transactions = pgTable("transactions", {
   last4CardDigits: text("last_4_card_digits").notNull(),
   cardReaderId: text("card_reader_id").notNull(),
   data: jsonb("data").notNull().default({}),
-})
+}, (table) => ({
+  orgCreatedAtIdx: index("transactions_org_created_at_idx").on(table.organizationId, table.createdAt),
+}))
 
 export const transactionItems = pgTable("transaction_items", {
   id: text("id").primaryKey(),
@@ -169,7 +174,10 @@ export const transactionItems = pgTable("transaction_items", {
   quantity: integer("quantity").notNull(),
   salePrice: decimal("sale_price", { precision: 10, scale: 2 }).notNull(),
   slotCode: text("slot_code").notNull().default(""),
-})
+}, (table) => ({
+  productIdIdx: index("transaction_items_product_id_idx").on(table.productId),
+  transactionIdIdx: index("transaction_items_transaction_id_idx").on(table.transactionId),
+}))
 
 // Tracks which transaction_items have been consumed during the iOS slot-linking flow.
 // Lambda writes to transactions/transaction_items; this table is written by the consume endpoint.
@@ -342,7 +350,9 @@ export const orderItems = pgTable("order_items", {
   updatedBy: text("updated_by")
     .references(() => users.id)
     .notNull(),
-})
+}, (table) => ({
+  productIdIdx: index("order_items_product_id_idx").on(table.productId),
+}))
 
 // Purchase orders track inventory purchases from vendors (different from sales orders)
 export const purchaseOrders = pgTable("purchase_orders", {

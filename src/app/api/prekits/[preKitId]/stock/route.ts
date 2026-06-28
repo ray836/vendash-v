@@ -116,8 +116,8 @@ export async function POST(
         // Cap at capacity
         const finalQuantity = Math.min(newQuantity, slot.capacity);
 
-        // Update slot
-        await slotRepository.updateSlotQuantity(item.slotId, finalQuantity);
+        // Update slot (absolute set — finalQuantity is already the capped total)
+        await slotRepository.setSlotQuantity(item.slotId, finalQuantity);
 
         console.log(
           `[PreKit API] Updated slot ${slot.labelCode}: ${slot.currentQuantity} → ${finalQuantity} (added ${item.quantity})`

@@ -2,14 +2,42 @@ import { Minus, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PublicOrderItemResponseDTO } from "@/domains/Order/schemas/orderDTOs"
 
+export interface OrderItemContext {
+  reason: "out_of_stock" | "insufficient_stock" | "projected_low" | "pad_to_minimum" | null
+  daysUntilStorageOut: number | null
+  storageQty: number
+  unitsShort: number
+}
+
 interface OrderItemProps {
   item: PublicOrderItemResponseDTO
+  context?: OrderItemContext
   onQuantityChange?: (id: string, newQuantity: number) => void
   onRemove?: () => void
 }
 
+function ReasonTag({ context }: { context: OrderItemContext }) {
+  const { reason, daysUntilStorageOut, unitsShort } = context
+
+  if (reason === "out_of_stock") {
+    return <span className="text-xs font-medium text-red-500">No storage remaining</span>
+  }
+  if (reason === "insufficient_stock") {
+    return <span className="text-xs font-medium text-orange-500">Machine short {unitsShort} unit{unitsShort !== 1 ? "s" : ""}</span>
+  }
+  if (reason === "projected_low" && daysUntilStorageOut !== null) {
+    const color = daysUntilStorageOut <= 7 ? "text-red-500" : "text-yellow-500"
+    return <span className={`text-xs font-medium ${color}`}>~{daysUntilStorageOut} days of storage left</span>
+  }
+  if (reason === "pad_to_minimum" && daysUntilStorageOut !== null) {
+    return <span className="text-xs text-muted-foreground">~{daysUntilStorageOut} days left · added for $50 min</span>
+  }
+  return null
+}
+
 export function OrderItem({
   item,
+  context,
   onQuantityChange,
   onRemove,
 }: OrderItemProps) {
@@ -32,6 +60,7 @@ export function OrderItem({
           <p className="text-sm text-muted-foreground">
             ${item.product.recommendedPrice.toFixed(2)} per item
           </p>
+          {context && <ReasonTag context={context} />}
         </div>
 
         {/* Case Info */}
