@@ -50,6 +50,7 @@ import {
   canAddSlotToRow,
   updateSlot as gridUpdateSlot,
   type SlotValidationError,
+  type SlotUpdates,
 } from "@/domains/VendingMachine/gridLogic"
 import { z } from "zod"
 import { SlotSchemas } from "@/domains/Slot/schemas/SlotSchemas"
@@ -242,6 +243,16 @@ function SlotSettings({
 }) {
   const product = orgProducts.find((p) => p.id === slot.productId)
 
+  const costPerUnit =
+    product && Number(product.caseSize) > 0
+      ? Number(product.caseCost) / Number(product.caseSize)
+      : null
+  const effectivePrice = slot.price || product?.recommendedPrice || 0
+  const margin =
+    costPerUnit !== null && effectivePrice > 0
+      ? Math.round(((effectivePrice - costPerUnit) / effectivePrice) * 100)
+      : null
+
   return (
     <div className="space-y-4">
       <div>
@@ -289,6 +300,31 @@ function SlotSettings({
         />
         {validationError?.field === "price" && (
           <p className="text-xs text-destructive">{validationError.message}</p>
+        )}
+        {costPerUnit !== null && (
+          <div className="rounded-lg border bg-muted/30">
+            <div className="grid grid-cols-3 divide-x divide-border/60">
+              <div className="px-3 py-2.5 text-center">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Cost</div>
+                <div className="mt-0.5 text-sm font-semibold tabular-nums">${costPerUnit.toFixed(2)}</div>
+              </div>
+              <div className="px-3 py-2.5 text-center">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Profit</div>
+                <div className="mt-0.5 text-sm font-semibold tabular-nums">${(effectivePrice - costPerUnit).toFixed(2)}</div>
+              </div>
+              <div className="px-3 py-2.5 text-center">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Margin</div>
+                <div className={`mt-0.5 text-sm font-semibold tabular-nums ${margin !== null && margin < 0 ? "text-red-500" : "text-green-600"}`}>
+                  {margin !== null ? `${margin}%` : "—"}
+                </div>
+              </div>
+            </div>
+            {margin !== null && margin < 0 && (
+              <p className="border-t border-border/60 px-3 py-2 text-xs text-red-500">
+                Losing money — raise the price above ${costPerUnit.toFixed(2)}.
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -692,7 +728,15 @@ export function VendingMachineSetup({
   const handleSlotUpdate = (updates: Partial<Slot>) => {
     if (!activeSlot) return
 
-    const safeUpdates = { ...updates, productId: updates.productId ?? undefined }
+    // Only normalize productId (empty string -> undefined) when it's actually
+    // part of this update; otherwise leave it out so we don't clear the slot's
+    // product when editing price/quantity/etc.
+    const safeUpdates = {
+      ...updates,
+      ...("productId" in updates
+        ? { productId: updates.productId || undefined }
+        : {}),
+    } as SlotUpdates
     const { slots: newSlots, error } = gridUpdateSlot(gs(slots), activeSlot.id, safeUpdates)
     setSlotError(error)
     if (error) return  // reject invalid update — slots unchanged
