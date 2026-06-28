@@ -99,7 +99,7 @@ export function CatalogPicker({ onSuccess, triggerLabel = "Browse catalog" }: Ca
           {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[720px]">
+      <DialogContent className="sm:max-w-[720px] lg:max-w-[900px] xl:max-w-[1120px]">
         <DialogHeader>
           <DialogTitle>Add products from the catalog</DialogTitle>
           <DialogDescription>
@@ -133,7 +133,7 @@ export function CatalogPicker({ onSuccess, triggerLabel = "Browse catalog" }: Ca
           </div>
         </div>
 
-        <ScrollArea className="h-[360px] -mx-1 px-1">
+        <ScrollArea className="h-[360px] lg:h-[480px] -mx-1 px-1">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -143,7 +143,7 @@ export function CatalogPicker({ onSuccess, triggerLabel = "Browse catalog" }: Ca
               No products match your search.
             </p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
               {visible.map((entry) => {
                 const isSelected = selected.has(entry.id)
                 return (

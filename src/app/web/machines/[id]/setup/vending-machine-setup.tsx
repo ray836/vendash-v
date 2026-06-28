@@ -27,7 +27,9 @@ import {
   updateMachine,
   getMachine,
   updateMachineInfo,
+  getOrgProducts,
 } from "./actions"
+import { CatalogPicker } from "@/app/web/products/catalog-picker"
 import { useToast } from "@/hooks/use-toast"
 import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import {
@@ -502,12 +504,22 @@ interface VendingMachineSetupProps {
 
 export function VendingMachineSetup({
   machineId,
-  products,
+  products: initialProducts,
   initialSlots,
   machineType: initialMachineType,
   locations,
   onboarding = false,
 }: VendingMachineSetupProps) {
+  // Local copy of the org's products so newly-added catalog picks show up in the
+  // palette immediately (the prop is a one-time server snapshot).
+  const [products, setProducts] = useState<PublicProductDTO[]>(initialProducts)
+  const refreshProducts = async () => {
+    try {
+      setProducts(await getOrgProducts())
+    } catch (error) {
+      console.error("refreshProducts:", error)
+    }
+  }
   // Initialize all state with basic values
   const [machine, setMachine] = useState<PublicVendingMachineDTO | null>(null)
   const { toast } = useToast()
@@ -960,7 +972,10 @@ export function VendingMachineSetup({
             <TabsContent value="products">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle>Available Products</CardTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle>Available Products</CardTitle>
+                    <CatalogPicker onSuccess={refreshProducts} triggerLabel="Catalog" />
+                  </div>
                   <div className="space-y-2 pt-1">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />

@@ -3,6 +3,7 @@ import { neonConfig, Pool } from "@neondatabase/serverless"
 import { config } from "dotenv"
 import * as schema from "./schema"
 import WebSocket from "ws"
+import { eq, like } from "drizzle-orm"
 
 // Load environment variables
 config({ path: ".env" })
@@ -19,80 +20,74 @@ const pool = new Pool({
 
 const db = drizzle(pool, { schema })
 
-// Starter set of common vending products for the shared catalog.
-// region: null = available everywhere (region filtering not wired up yet).
-// Stable string ids ("std-*") so re-running is idempotent via onConflictDoNothing.
-type SeedStandardProduct = {
-  id: string
-  name: string
-  category: string
-  recommendedPrice: string
-  caseCost: string
-  caseSize: string
-  shelfLifeDays: number
-  image: string
-}
+// Seed the shared catalog by promoting an existing org's products into
+// standard_products. Those products carry real (scraped) vendor images, so the
+// catalog ships with real photos instead of placeholders.
+//
+// SOURCE_ORG is the org whose products become the catalog. Stable ids
+// ("std-from-<productId>") keep it idempotent. Region is null = everywhere
+// (filtering not wired up yet).
+const SOURCE_ORG = process.env.CATALOG_SOURCE_ORG ?? "1"
 
-const STANDARD_PRODUCTS: SeedStandardProduct[] = [
-  // --- Chips & savory snacks ---
-  { id: "std-lays-classic", name: "Lay's Classic Potato Chips", category: "chips", recommendedPrice: "1.50", caseCost: "21.98", caseSize: "40", shelfLifeDays: 60, image: "https://placehold.co/200x200?text=Lay%27s" },
-  { id: "std-doritos-nacho", name: "Doritos Nacho Cheese", category: "chips", recommendedPrice: "1.75", caseCost: "23.48", caseSize: "40", shelfLifeDays: 60, image: "https://placehold.co/200x200?text=Doritos" },
-  { id: "std-cheetos-crunchy", name: "Cheetos Crunchy", category: "chips", recommendedPrice: "1.75", caseCost: "23.48", caseSize: "40", shelfLifeDays: 60, image: "https://placehold.co/200x200?text=Cheetos" },
-  { id: "std-ruffles-cheddar", name: "Ruffles Cheddar & Sour Cream", category: "chips", recommendedPrice: "1.75", caseCost: "23.48", caseSize: "40", shelfLifeDays: 60, image: "https://placehold.co/200x200?text=Ruffles" },
-  { id: "std-sunchips-harvest", name: "SunChips Harvest Cheddar", category: "chips", recommendedPrice: "1.75", caseCost: "23.48", caseSize: "40", shelfLifeDays: 60, image: "https://placehold.co/200x200?text=SunChips" },
-  { id: "std-cheezit", name: "Cheez-It Original", category: "snack", recommendedPrice: "1.75", caseCost: "19.98", caseSize: "30", shelfLifeDays: 120, image: "https://placehold.co/200x200?text=Cheez-It" },
-  { id: "std-pretzels", name: "Rold Gold Pretzels", category: "snack", recommendedPrice: "1.50", caseCost: "18.98", caseSize: "40", shelfLifeDays: 120, image: "https://placehold.co/200x200?text=Pretzels" },
+async function seedStandardProductsFromOrg() {
+  console.log(`Seeding catalog from org "${SOURCE_ORG}" products...`)
 
-  // --- Cookies & sweet snacks ---
-  { id: "std-oreo", name: "Oreo Cookies (2-pack)", category: "cookies", recommendedPrice: "1.50", caseCost: "16.98", caseSize: "30", shelfLifeDays: 180, image: "https://placehold.co/200x200?text=Oreo" },
-  { id: "std-chips-ahoy", name: "Chips Ahoy! (2-pack)", category: "cookies", recommendedPrice: "1.50", caseCost: "16.98", caseSize: "30", shelfLifeDays: 180, image: "https://placehold.co/200x200?text=Chips+Ahoy" },
-  { id: "std-poptart", name: "Pop-Tarts Frosted Strawberry", category: "snack", recommendedPrice: "1.50", caseCost: "17.98", caseSize: "36", shelfLifeDays: 180, image: "https://placehold.co/200x200?text=Pop-Tarts" },
+  // 1. Drop legacy placeholder rows (placehold.co images). Safe: catalog rows
+  //    are only deletable when nothing references them via sourceStandardId.
+  const removed = await db
+    .delete(schema.standardProducts)
+    .where(like(schema.standardProducts.image, "%placehold.co%"))
+    .returning({ id: schema.standardProducts.id })
+  if (removed.length) console.log(`Removed ${removed.length} placeholder catalog rows.`)
 
-  // --- Candy ---
-  { id: "std-snickers", name: "Snickers Bar", category: "candy", recommendedPrice: "1.50", caseCost: "26.98", caseSize: "48", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=Snickers" },
-  { id: "std-mms-peanut", name: "M&M's Peanut", category: "candy", recommendedPrice: "1.50", caseCost: "26.98", caseSize: "48", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=M%26M%27s" },
-  { id: "std-kitkat", name: "Kit Kat", category: "candy", recommendedPrice: "1.50", caseCost: "26.98", caseSize: "48", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=Kit+Kat" },
-  { id: "std-skittles", name: "Skittles Original", category: "candy", recommendedPrice: "1.50", caseCost: "25.98", caseSize: "36", shelfLifeDays: 365, image: "https://placehold.co/200x200?text=Skittles" },
-  { id: "std-reeses", name: "Reese's Peanut Butter Cups", category: "candy", recommendedPrice: "1.50", caseCost: "26.98", caseSize: "48", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=Reese%27s" },
+  // 2. Load the source org's products and the names already in the catalog
+  //    (dedupe by name, so re-running or multiple sources don't duplicate).
+  const [sourceProducts, existing] = await Promise.all([
+    db.select().from(schema.products).where(eq(schema.products.organizationId, SOURCE_ORG)),
+    db.select({ name: schema.standardProducts.name }).from(schema.standardProducts),
+  ])
+  const existingNames = new Set(existing.map((e) => e.name.toLowerCase()))
 
-  // --- Drinks ---
-  { id: "std-coke-20oz", name: "Coca-Cola 20oz", category: "drink", recommendedPrice: "2.00", caseCost: "28.98", caseSize: "24", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=Coca-Cola" },
-  { id: "std-diet-coke-20oz", name: "Diet Coke 20oz", category: "drink", recommendedPrice: "2.00", caseCost: "28.98", caseSize: "24", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=Diet+Coke" },
-  { id: "std-sprite-20oz", name: "Sprite 20oz", category: "drink", recommendedPrice: "2.00", caseCost: "28.98", caseSize: "24", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=Sprite" },
-  { id: "std-pepsi-20oz", name: "Pepsi 20oz", category: "drink", recommendedPrice: "2.00", caseCost: "28.98", caseSize: "24", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=Pepsi" },
-  { id: "std-gatorade", name: "Gatorade Fruit Punch 20oz", category: "drink", recommendedPrice: "2.25", caseCost: "21.98", caseSize: "24", shelfLifeDays: 270, image: "https://placehold.co/200x200?text=Gatorade" },
-  { id: "std-water-16oz", name: "Bottled Water 16.9oz", category: "drink", recommendedPrice: "1.25", caseCost: "5.98", caseSize: "40", shelfLifeDays: 365, image: "https://placehold.co/200x200?text=Water" },
-  { id: "std-redbull", name: "Red Bull Energy 12oz", category: "drink", recommendedPrice: "3.00", caseCost: "33.98", caseSize: "24", shelfLifeDays: 365, image: "https://placehold.co/200x200?text=Red+Bull" },
-]
-
-async function seedStandardProducts() {
-  console.log("Seeding standard product catalog...")
-
+  // 3. Promote each product into the catalog.
   let inserted = 0
-  for (const product of STANDARD_PRODUCTS) {
+  for (const p of sourceProducts) {
+    if (existingNames.has(p.name.toLowerCase())) continue
     const result = await db
       .insert(schema.standardProducts)
       .values({
-        ...product,
-        vendorLink: "https://www.samsclub.com",
+        id: `std-from-${p.id}`,
+        name: p.name,
+        recommendedPrice: p.recommendedPrice,
+        category: p.category,
+        image: p.image,
+        vendorLink: p.vendorLink,
+        vendorSku: p.vendorSku,
+        barcode: p.barcode,
+        caseCost: p.caseCost,
+        caseSize: p.caseSize,
+        shelfLifeDays: p.shelfLifeDays,
         region: null,
       })
       .onConflictDoNothing()
       .returning({ id: schema.standardProducts.id })
-    inserted += result.length
+    if (result.length) {
+      inserted += 1
+      existingNames.add(p.name.toLowerCase())
+    }
   }
 
+  const total = (await db.select().from(schema.standardProducts)).length
   console.log(
-    `Standard catalog seed complete: ${inserted} inserted, ${STANDARD_PRODUCTS.length - inserted} already present.`
+    `Catalog seed complete: promoted ${inserted} of ${sourceProducts.length} org products. Catalog now has ${total} products.`
   )
 }
 
-seedStandardProducts()
+seedStandardProductsFromOrg()
   .then(() => {
     console.log("Done.")
     process.exit(0)
   })
   .catch((error) => {
-    console.error("Standard catalog seed failed:", error)
+    console.error("Catalog seed failed:", error)
     process.exit(1)
   })
