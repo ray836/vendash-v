@@ -87,8 +87,9 @@ export function OrderItem({
             variant="outline"
             size="icon"
             className="h-8 w-8"
+            disabled={item.quantity <= 1}
             onClick={() =>
-              onQuantityChange?.(item.id, Math.max(0, item.quantity - 1))
+              onQuantityChange?.(item.id, Math.max(1, item.quantity - 1))
             }
           >
             <Minus className="h-4 w-4" />

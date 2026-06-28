@@ -960,7 +960,10 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
                               {machine.type === "DRINK" ? <CupSoda className="h-4 w-4" /> : <Cookie className="h-4 w-4" />}
                             </span>
                             <div className="min-w-0">
-                              <p className="font-medium text-sm leading-tight truncate">{machine.model}</p>
+                              <div className="flex items-baseline gap-1.5">
+                                <p className="font-medium text-sm leading-tight truncate">{machine.model}</p>
+                                {machine.displayId && <span className="text-xs text-muted-foreground font-mono shrink-0">#{machine.displayId}</span>}
+                              </div>
                               <p className="text-xs text-muted-foreground mt-0.5 truncate">{machine.locationName ?? machine.locationId}</p>
                             </div>
                           </div>

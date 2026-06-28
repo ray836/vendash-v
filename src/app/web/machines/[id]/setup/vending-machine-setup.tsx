@@ -221,7 +221,7 @@ function SlotButton({
               className="w-full h-full object-contain opacity-90"
             />
             <span className="absolute bottom-1 right-1 text-xs font-semibold bg-background/80 rounded px-1 leading-tight">
-              ${(slot.price || product.recommendedPrice).toFixed(2)}
+              ${(slot.price != null ? slot.price : product.recommendedPrice).toFixed(2)}
             </span>
           </>
         ) : null}
@@ -247,29 +247,38 @@ function SlotSettings({
     product && Number(product.caseSize) > 0
       ? Number(product.caseCost) / Number(product.caseSize)
       : null
-  const effectivePrice = slot.price || product?.recommendedPrice || 0
+  const effectivePrice = slot.price != null ? slot.price : (product?.recommendedPrice ?? 0)
   const margin =
     costPerUnit !== null && effectivePrice > 0
       ? Math.round(((effectivePrice - costPerUnit) / effectivePrice) * 100)
       : null
+  // Lowest $0.25-increment price that achieves ≥50% margin
+  const recommendedPrice =
+    costPerUnit !== null
+      ? Math.ceil((costPerUnit / 0.5) / 0.25) * 0.25
+      : null
+  const recommendedMargin =
+    recommendedPrice !== null && costPerUnit !== null && recommendedPrice > 0
+      ? Math.round(((recommendedPrice - costPerUnit) / recommendedPrice) * 100)
+      : null
+  const showRecommendation = margin !== null && margin < 30 && recommendedPrice !== null && recommendedPrice !== effectivePrice
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="font-medium mb-2">
-          Slot {slot.labelCode}
-        </h3>
+    <div className="p-5 space-y-5">
+      {/* Header */}
+      <div className="space-y-3">
+        <h3 className="text-base font-semibold tracking-tight">Slot {slot.labelCode}</h3>
         {product && (
-          <div className="flex items-center gap-3 p-3 rounded-md bg-muted/40 mb-2">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border/50">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={product.image || "/placeholder.svg"}
               alt={product.name}
-              className="w-10 h-10 object-contain shrink-0"
+              className="w-10 h-10 object-contain shrink-0 rounded"
             />
             <Link
               href={`/web/products/${product.id}`}
-              className="text-sm font-medium leading-snug hover:underline"
+              className="text-sm font-medium leading-snug hover:underline text-foreground"
               target="_blank"
             >
               {product.name}
@@ -278,8 +287,11 @@ function SlotSettings({
         )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="price">Price Override</Label>
+      <div className="h-px bg-border/50" />
+
+      {/* Pricing */}
+      <div className="space-y-3">
+        <Label htmlFor="price" className="text-xs uppercase tracking-wide text-muted-foreground">Price Override</Label>
         <Input
           id="price"
           type="number"
@@ -290,8 +302,8 @@ function SlotSettings({
               ? `Default: $${product.recommendedPrice.toFixed(2)}`
               : "Set price"
           }
-          value={slot.price || ""}
-          className={validationError?.field === "price" ? "border-destructive" : ""}
+          value={slot.price != null ? slot.price : ""}
+          className={`text-base font-medium ${validationError?.field === "price" ? "border-destructive" : ""}`}
           onChange={(e) =>
             onUpdate({
               price: e.target.value ? Number(e.target.value) : undefined,
@@ -302,36 +314,55 @@ function SlotSettings({
           <p className="text-xs text-destructive">{validationError.message}</p>
         )}
         {costPerUnit !== null && (
-          <div className="rounded-lg border bg-muted/30">
+          <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
             <div className="grid grid-cols-3 divide-x divide-border/60">
-              <div className="px-3 py-2.5 text-center">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Cost</div>
-                <div className="mt-0.5 text-sm font-semibold tabular-nums">${costPerUnit.toFixed(2)}</div>
+              <div className="px-4 py-3 text-center">
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Cost</div>
+                <div className="text-sm font-semibold tabular-nums">${costPerUnit.toFixed(2)}</div>
               </div>
-              <div className="px-3 py-2.5 text-center">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Profit</div>
-                <div className="mt-0.5 text-sm font-semibold tabular-nums">${(effectivePrice - costPerUnit).toFixed(2)}</div>
+              <div className="px-4 py-3 text-center">
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Profit</div>
+                <div className="text-sm font-semibold tabular-nums">${(effectivePrice - costPerUnit).toFixed(2)}</div>
               </div>
-              <div className="px-3 py-2.5 text-center">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Margin</div>
-                <div className={`mt-0.5 text-sm font-semibold tabular-nums ${margin !== null && margin < 0 ? "text-red-500" : "text-green-600"}`}>
+              <div className="px-4 py-3 text-center">
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Margin</div>
+                <div className={`text-sm font-semibold tabular-nums ${margin !== null && margin < 0 ? "text-red-500" : "text-green-500"}`}>
                   {margin !== null ? `${margin}%` : "—"}
                 </div>
               </div>
             </div>
             {margin !== null && margin < 0 && (
-              <p className="border-t border-border/60 px-3 py-2 text-xs text-red-500">
-                Losing money — raise the price above ${costPerUnit.toFixed(2)}.
-              </p>
+              <div className="border-t border-border/60 px-4 py-2 bg-red-500/10">
+                <p className="text-xs text-red-400">Losing money — raise the price above ${costPerUnit.toFixed(2)}.</p>
+              </div>
             )}
           </div>
         )}
+        {showRecommendation && recommendedPrice !== null && recommendedMargin !== null && (
+          <button
+            type="button"
+            onClick={() => onUpdate({ price: recommendedPrice })}
+            className="w-full flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 hover:bg-amber-500/20 transition-colors"
+          >
+            <div className="text-left">
+              <div className="text-xs text-amber-400/70 uppercase tracking-wide">Recommended</div>
+              <div className="text-sm font-semibold text-amber-400">${recommendedPrice.toFixed(2)}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-muted-foreground">margin</div>
+              <div className="text-sm font-semibold text-green-500">{recommendedMargin}%</div>
+            </div>
+          </button>
+        )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="currentQuantity">Current Quantity</Label>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 p-0.5">
+      <div className="h-px bg-border/50" />
+
+      {/* Inventory */}
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="currentQuantity" className="text-xs uppercase tracking-wide text-muted-foreground">Current Quantity</Label>
+          <div className="flex items-center gap-3">
             <Input
               id="currentQuantity"
               type="number"
@@ -343,46 +374,47 @@ function SlotSettings({
                 onUpdate({ currentQuantity: Number(e.target.value) })
               }
             />
-            <div className="text-sm text-muted-foreground whitespace-nowrap px-2">
-              / {slot.capacity}
-            </div>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">/ {slot.capacity}</span>
           </div>
+          {validationError?.field === "currentQuantity" && (
+            <p className="text-xs text-destructive">{validationError.message}</p>
+          )}
         </div>
-        {validationError?.field === "currentQuantity" && (
-          <p className="text-xs text-destructive">{validationError.message}</p>
-        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="capacity" className="text-xs uppercase tracking-wide text-muted-foreground">Capacity</Label>
+          <Input
+            id="capacity"
+            type="number"
+            min="1"
+            max="50"
+            value={slot.capacity}
+            className={validationError?.field === "capacity" ? "border-destructive" : ""}
+            onChange={(e) => onUpdate({ capacity: Number(e.target.value) })}
+          />
+          {validationError?.field === "capacity" && (
+            <p className="text-xs text-destructive">{validationError.message}</p>
+          )}
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="capacity">Capacity</Label>
-        <Input
-          id="capacity"
-          type="number"
-          min="1"
-          max="50"
-          value={slot.capacity}
-          className={validationError?.field === "capacity" ? "border-destructive" : ""}
-          onChange={(e) => onUpdate({ capacity: Number(e.target.value) })}
-        />
-        {validationError?.field === "capacity" && (
-          <p className="text-xs text-destructive">{validationError.message}</p>
-        )}
-      </div>
+      <div className="h-px bg-border/50" />
 
+      {/* Hardware */}
       <div className="space-y-2">
-        <Label htmlFor="cardReaderSlotId">Card Reader Slot Code</Label>
+        <Label htmlFor="cardReaderSlotId" className="text-xs uppercase tracking-wide text-muted-foreground">Card Reader Slot Code</Label>
         <Input
           id="cardReaderSlotId"
           value={slot.ccReaderCode || ""}
           onChange={(e) => onUpdate({ ccReaderCode: e.target.value })}
-          placeholder="Enter card reader slot Code"
+          placeholder="Enter card reader slot code"
         />
       </div>
 
       {product && (
         <Button
           variant="outline"
-          className="w-full"
+          className="w-full text-muted-foreground hover:text-destructive hover:border-destructive/50"
           onClick={() => onUpdate({ productId: "", price: undefined })}
         >
           Clear Slot
@@ -783,7 +815,8 @@ export function VendingMachineSetup({
             {onboarding ? "Back to setup" : "Back to Machine Details"}
           </Link>
           <h1 className="text-2xl font-bold">
-            Configure Vending Machine - {machineId}
+            Configure — {machine.model} · {machine.type === "SNACK" ? "Snack" : "Drink"}
+            {machine.displayId && <span className="text-muted-foreground font-normal"> #{machine.displayId}</span>}
           </h1>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -815,13 +848,15 @@ export function VendingMachineSetup({
               </PopoverContent>
             </Popover>
             {hasUnsavedChanges && (
-              <span className="flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium self-center">
-                Unsaved changes
-              </span>
+              <>
+                <span className="flex items-center text-xs text-amber-600 dark:text-amber-400 font-medium self-center">
+                  Unsaved changes
+                </span>
+                <Button onClick={handleSaveConfiguration} disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save Configuration"}
+                </Button>
+              </>
             )}
-            <Button onClick={handleSaveConfiguration} disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Configuration"}
-            </Button>
           </div>
           {setupComplete && (
             <div className="flex items-center gap-2 rounded-md bg-green-500/15 border border-green-500/30 px-3 py-2 text-green-700 dark:text-green-400">
