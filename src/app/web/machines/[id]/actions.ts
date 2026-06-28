@@ -16,11 +16,7 @@ import { UpdatePreKitItemRequest, UpdatePreKitRequest } from "@/domains/PreKit/s
 import { MachineWithSlotsDTO, MachineDetailDataDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
-import {
-  inferUnitsSold,
-  spreadSalesOverDays,
-  MAX_SPREAD_DAYS,
-} from "@/domains/Inventory/reconciliation"
+import * as RestockService from "@/domains/Inventory/RestockService"
 
 export async function getMachineWithSlots(machineId: string) {
   const session = await auth()
@@ -113,17 +109,9 @@ export async function updatePreKitItems(
 
 // --- Manual sales capture via count reconciliation -------------------------
 
-export type RestockSlotInfo = {
-  slotId: string
-  labelCode: string
-  productId: string
-  productName: string
-  recommendedPrice: number
-  capacity: number
-  currentQuantity: number
-}
+// Re-exported from RestockService (the shared core) so existing UI imports keep working.
+export type RestockSlotInfo = RestockService.RestockSlotInfo
 
-/** Slots (with product info) for the restock count dialog. */
 /** Update a single slot's price and/or current quantity (Overview quick-edit panel). */
 export async function updateSlot(
   slotId: string,
@@ -155,39 +143,15 @@ export async function getRestockSlots(
   const { organizationId } = session.user
 
   try {
-    const machineRepo = new VendingMachineRepository(db)
-    const slotRepo = new SlotRepository(db)
-    const productRepo = new ProductRepository(db)
-
-    const machine = await machineRepo.findById(machineId)
-    if (!machine || machine.organizationId !== organizationId) {
-      return { success: false, slots: [], hasTelemetry: false, error: "Machine not found" }
-    }
-
-    const [slots, products] = await Promise.all([
-      slotRepo.findByMachineId(machineId),
-      productRepo.findByOrganizationId(organizationId),
-    ])
-    const productMap = new Map(products.map((p) => [p.id, p]))
-
-    const result: RestockSlotInfo[] = slots
-      .filter((s) => s.productId)
-      .map((s) => {
-        const product = productMap.get(s.productId!)
-        return {
-          slotId: s.id,
-          labelCode: s.labelCode,
-          productId: s.productId!,
-          productName: product?.name ?? "Unknown product",
-          recommendedPrice: product?.recommendedPrice ?? 0,
-          capacity: s.capacity,
-          currentQuantity: s.currentQuantity,
-        }
-      })
-      .sort((a, b) => a.labelCode.localeCompare(b.labelCode))
-
-    const hasTelemetry = !!machine.cardReaderId?.trim()
-    return { success: true, slots: result, hasTelemetry }
+    return await RestockService.getRestockSlots(
+      {
+        machineRepo: new VendingMachineRepository(db),
+        slotRepo: new SlotRepository(db),
+        productRepo: new ProductRepository(db),
+      },
+      organizationId,
+      machineId
+    )
   } catch (error) {
     console.error("getRestockSlots:", error)
     return { success: false, slots: [], hasTelemetry: false, error: "Failed to load slots" }
@@ -203,128 +167,30 @@ export async function getRestockSlots(
 export async function recordRestockCounts(
   machineId: string,
   entries: { slotId: string; leftNow: number; refillTo: number }[]
-): Promise<{
-  success: boolean
-  totalSold: number
-  refilledSlots: number
-  daysSpread: number
-  telemetrySkipped: boolean
-  error?: string
-}> {
+): Promise<RestockService.RecordRestockResult> {
   const session = await auth()
   if (!session) throw new Error("Unauthorized")
   const { organizationId } = session.user
 
   try {
-    const machineRepo = new VendingMachineRepository(db)
-    const slotRepo = new SlotRepository(db)
-    const productRepo = new ProductRepository(db)
-    const inventoryRepo = new InventoryRepository(db)
-    const txRepo = new TransactionRepository(db)
+    const result = await RestockService.recordRestockCounts(
+      {
+        machineRepo: new VendingMachineRepository(db),
+        slotRepo: new SlotRepository(db),
+        productRepo: new ProductRepository(db),
+        inventoryRepo: new InventoryRepository(db),
+        txRepo: new TransactionRepository(db),
+      },
+      organizationId,
+      machineId,
+      entries
+    )
 
-    const machine = await machineRepo.findById(machineId)
-    if (!machine || machine.organizationId !== organizationId) {
-      return { success: false, totalSold: 0, refilledSlots: 0, daysSpread: 0, telemetrySkipped: false, error: "Machine not found" }
+    if (result.success) {
+      revalidatePath(`/web/machines/${machineId}`)
+      revalidatePath("/web/products")
     }
-
-    const [slots, products] = await Promise.all([
-      slotRepo.findByMachineId(machineId),
-      productRepo.findByOrganizationId(organizationId),
-    ])
-    const slotMap = new Map(slots.map((s) => [s.id, s]))
-    const productMap = new Map(products.map((p) => [p.id, p]))
-
-    const hasTelemetry = !!machine.cardReaderId?.trim()
-    const reconCardReader = `MANUAL-${machineId}`
-
-    // Elapsed days for spreading inferred sales (manual machines only)
-    const DAY_MS = 86_400_000
-    let elapsedDays = 14
-    if (!hasTelemetry) {
-      const lastDate = await txRepo.findLatestByCardReader(reconCardReader)
-      if (lastDate) elapsedDays = Math.round((Date.now() - lastDate.getTime()) / DAY_MS)
-    }
-    const n = Math.max(1, Math.min(elapsedDays, MAX_SPREAD_DAYS))
-
-    // soldByProduct aggregates sales across all of a product's slots
-    const soldByProduct = new Map<string, { sold: number; price: number; slotCode: string }>()
-    let totalSold = 0
-    let refilledSlots = 0
-
-    for (const entry of entries) {
-      const slot = slotMap.get(entry.slotId)
-      if (!slot || !slot.productId) continue
-
-      const lastKnown = slot.currentQuantity
-      const leftNow = Math.max(0, Math.floor(entry.leftNow))
-      const refillTo = Math.max(leftNow, Math.floor(entry.refillTo))
-
-      const sold = inferUnitsSold(lastKnown, leftNow)
-      const added = Math.max(0, refillTo - leftNow)
-
-      await slotRepo.setSlotQuantity(slot.id, refillTo)
-      await inventoryRepo.applyReconciliation(slot.productId, added, sold, organizationId)
-
-      if (added > 0) refilledSlots++
-      if (sold > 0) {
-        totalSold += sold
-        const existing = soldByProduct.get(slot.productId)
-        if (existing) {
-          existing.sold += sold
-        } else {
-          soldByProduct.set(slot.productId, {
-            sold,
-            price: productMap.get(slot.productId)?.recommendedPrice ?? 0,
-            slotCode: slot.labelCode,
-          })
-        }
-      }
-    }
-
-    // Write inferred sales as transactions, spread across the period (manual only)
-    if (!hasTelemetry && totalSold > 0) {
-      const now = new Date()
-      const perDayItems = new Map<number, { productId: string; quantity: number; salePrice: number; slotCode: string }[]>()
-
-      for (const [productId, info] of soldByProduct) {
-        const spread = spreadSalesOverDays(info.sold, n)
-        for (let d = 0; d < spread.length; d++) {
-          if (spread[d] <= 0) continue
-          const items = perDayItems.get(d) ?? []
-          items.push({ productId, quantity: spread[d], salePrice: info.price, slotCode: info.slotCode })
-          perDayItems.set(d, items)
-        }
-      }
-
-      for (const [d, items] of perDayItems) {
-        // d = 0 is the oldest day in the window, n-1 is today
-        const createdAt = new Date(now.getTime() - (n - 1 - d) * DAY_MS)
-        const total = items.reduce((sum, i) => sum + i.quantity * i.salePrice, 0)
-        await txRepo.createSale(
-          {
-            organizationId,
-            cardReaderId: reconCardReader,
-            createdAt,
-            transactionType: "SALE",
-            total,
-            last4CardDigits: "RECON",
-            data: { source: "reconciliation", machineId },
-          },
-          items
-        )
-      }
-    }
-
-    revalidatePath(`/web/machines/${machineId}`)
-    revalidatePath("/web/products")
-
-    return {
-      success: true,
-      totalSold,
-      refilledSlots,
-      daysSpread: hasTelemetry ? 0 : n,
-      telemetrySkipped: hasTelemetry,
-    }
+    return result
   } catch (error) {
     console.error("recordRestockCounts:", error)
     return { success: false, totalSold: 0, refilledSlots: 0, daysSpread: 0, telemetrySkipped: false, error: "Failed to record restock" }

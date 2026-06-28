@@ -6,6 +6,7 @@ import { ProductRepository } from "@/infrastructure/repositories/ProductReposito
 import { StandardProductRepository } from "@/infrastructure/repositories/StandardProductRepository"
 import { SlotRepository } from "@/infrastructure/repositories/SlotRepository"
 import * as ProductService from "@/domains/Product/ProductService"
+import * as StandardProductService from "@/domains/Product/StandardProductService"
 import { StandardCatalogEntryDTO } from "@/domains/Product/DTOs/standardProductDTOs"
 import { generateProductAliases } from "@/lib/generateProductAliases"
 import { auth } from "@/lib/auth"
@@ -40,24 +41,11 @@ export async function getStandardCatalog(): Promise<StandardCatalogEntryDTO[]> {
   const { organizationId } = session.user
 
   try {
-    const standardRepo = new StandardProductRepository(db)
-    const productRepo = new ProductRepository(db)
-
-    const [catalog, orgProducts] = await Promise.all([
-      standardRepo.findAll(),
-      productRepo.findByOrganizationId(organizationId),
-    ])
-
-    const addedStandardIds = new Set(
-      orgProducts
-        .map((p) => p.sourceStandardId)
-        .filter((id): id is string => !!id)
+    return await StandardProductService.getStandardCatalog(
+      new StandardProductRepository(db),
+      new ProductRepository(db),
+      organizationId
     )
-
-    return catalog.map((entry) => ({
-      ...entry,
-      alreadyAdded: addedStandardIds.has(entry.id),
-    }))
   } catch (error) {
     console.error("Failed to fetch standard catalog:", error)
     throw new Error("Failed to fetch standard catalog")
@@ -74,50 +62,13 @@ export async function pickStandardProducts(standardIds: string[]): Promise<{ add
   if (!session) throw new Error("Unauthorized")
   const { organizationId } = session.user
 
-  if (standardIds.length === 0) return { added: 0 }
-
   try {
-    const standardRepo = new StandardProductRepository(db)
-    const productRepo = new ProductRepository(db)
-
-    const [standards, orgProducts] = await Promise.all([
-      standardRepo.findByIds(standardIds),
-      productRepo.findByOrganizationId(organizationId),
-    ])
-
-    const alreadyAdded = new Set(
-      orgProducts
-        .map((p) => p.sourceStandardId)
-        .filter((id): id is string => !!id)
+    return await StandardProductService.pickStandardProducts(
+      new StandardProductRepository(db),
+      new ProductRepository(db),
+      organizationId,
+      standardIds
     )
-    const toClone = standards.filter((s) => !alreadyAdded.has(s.id))
-
-    for (const standard of toClone) {
-      const aliases = await generateProductAliases(standard.name)
-      const product = new Product({
-        id: crypto.randomUUID(),
-        name: standard.name,
-        recommendedPrice: standard.recommendedPrice,
-        category: standard.category,
-        image: standard.image,
-        vendorLink: standard.vendorLink ?? "",
-        vendorSku: standard.vendorSku,
-        barcode: standard.barcode,
-        caseCost: standard.caseCost,
-        caseSize: standard.caseSize,
-        shippingAvailable: true,
-        shippingTimeInDays: 0,
-        shelfLifeDays: standard.shelfLifeDays,
-        aliases,
-        sourceStandardId: standard.id,
-        organizationId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      await ProductService.createProduct(productRepo, product)
-    }
-
-    return { added: toClone.length }
   } catch (error) {
     console.error("Failed to add catalog products:", error)
     throw new Error("Failed to add catalog products")
