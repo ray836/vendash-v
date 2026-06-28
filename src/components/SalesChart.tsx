@@ -116,6 +116,7 @@ export function SalesChart({ data, groupBy }: SalesChartProps) {
                         <>
                           <div>Cost: ${cost.toFixed(2)}</div>
                           <div>Profit: ${profit.toFixed(2)}</div>
+                          <div>Margin: {item.sales > 0 ? Math.round((profit / item.sales) * 100) : 0}%</div>
                         </>
                       )}
                     </div>

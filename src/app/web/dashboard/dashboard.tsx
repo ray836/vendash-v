@@ -269,6 +269,12 @@ function SalesChart({
                             ${profit.toFixed(2)}
                           </span>
                         </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-muted-foreground">Margin</span>
+                          <span className="font-bold">
+                            {item.totalSales > 0 ? Math.round((profit / item.totalSales) * 100) : 0}%
+                          </span>
+                        </div>
                       </>
                     )}
                     <div className="flex justify-between gap-4">
