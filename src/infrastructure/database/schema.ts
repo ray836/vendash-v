@@ -52,6 +52,9 @@ export const slots = pgTable("slots", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   capacity: integer("capacity").default(10),
   currentQuantity: integer("current_quantity").default(0),
+  // When currentQuantity was last set to a real physical count (restock/setup).
+  // Used to project depletion between visits; null = never counted (skip projection).
+  lastCountedAt: timestamp("last_counted_at"),
   sequenceNumber: integer("sequence_number").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

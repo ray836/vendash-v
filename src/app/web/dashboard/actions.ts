@@ -8,6 +8,7 @@ import * as TransactionService from "@/domains/Transaction/TransactionService"
 import * as VendingMachineService from "@/domains/VendingMachine/VendingMachineService"
 import * as ProductService from "@/domains/Product/ProductService"
 import { ProductRepository } from "@/infrastructure/repositories/ProductRepository"
+import { SlotRepository } from "@/infrastructure/repositories/SlotRepository"
 import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
 import { auth } from "@/lib/auth"
 
@@ -20,16 +21,22 @@ export async function getDashboardData() {
   const machineRepo = new VendingMachineRepository(db)
   const locationRepo = new LocationRepository(db)
   const productRepo = new ProductRepository(db)
+  const slotRepo = new SlotRepository(db)
 
   const now = new Date()
   // Furthest back we need: start of prev month (for monthly comparison chart)
   const dashboardStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
 
-  const [machines, productMetrics, transactions] = await Promise.all([
+  const [machines, allSlots, transactions] = await Promise.all([
     VendingMachineService.getMachines(machineRepo, locationRepo, organizationId),
-    ProductService.getOrgProductDataMetrics(productRepo, organizationId),
+    slotRepo.findByOrganizationId(organizationId),
     TransactionService.getOrgTransactions(txRepo, organizationId, dashboardStart, now),
   ])
+  const productMetrics = await ProductService.getOrgProductDataMetrics(
+    productRepo,
+    organizationId,
+    allSlots.map((s) => ({ id: s.id, productId: s.productId, currentQuantity: s.currentQuantity, lastCountedAt: s.lastCountedAt }))
+  )
 
   // Machine stats
   const totalMachines = machines.length

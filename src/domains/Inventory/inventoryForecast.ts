@@ -110,3 +110,23 @@ export function sellsThroughBeforeExpiry(p: {
   const daysToSellOneCase = p.caseSize / p.avgDailySales
   return daysToSellOneCase <= p.shelfLifeDays * SHELF_LIFE_SELLTHROUGH
 }
+
+/** Fractional days between a past date and `now` (never negative). */
+export function daysSince(date: Date | string, now: Date = new Date()): number {
+  const then = new Date(date).getTime()
+  return Math.max(0, (now.getTime() - then) / 86_400_000)
+}
+
+/**
+ * Project how many units remain in a slot given its last counted quantity, the
+ * per-slot daily sales rate, and days elapsed since that count. Floored at 0.
+ * With no velocity or no elapsed time it returns the last count unchanged.
+ */
+export function projectedRemaining(
+  lastQty: number,
+  perSlotDailySales: number,
+  daysElapsed: number
+): number {
+  if (perSlotDailySales <= 0 || daysElapsed <= 0) return lastQty
+  return Math.max(0, Math.round(lastQty - perSlotDailySales * daysElapsed))
+}

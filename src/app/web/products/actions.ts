@@ -3,6 +3,7 @@
 import { db } from "@/infrastructure/database"
 import { Product } from "@/domains/Product/entities/Product"
 import { ProductRepository } from "@/infrastructure/repositories/ProductRepository"
+import { SlotRepository } from "@/infrastructure/repositories/SlotRepository"
 import * as ProductService from "@/domains/Product/ProductService"
 import { generateProductAliases } from "@/lib/generateProductAliases"
 import { auth } from "@/lib/auth"
@@ -14,7 +15,13 @@ export async function getOrgProductDataMetrics() {
 
   try {
     const repo = new ProductRepository(db)
-    return await ProductService.getOrgProductDataMetrics(repo, organizationId)
+    const slotRepo = new SlotRepository(db)
+    const slots = await slotRepo.findByOrganizationId(organizationId)
+    return await ProductService.getOrgProductDataMetrics(
+      repo,
+      organizationId,
+      slots.map((s) => ({ id: s.id, productId: s.productId, currentQuantity: s.currentQuantity, lastCountedAt: s.lastCountedAt }))
+    )
   } catch (error) {
     console.error("Failed to fetch product data metrics:", error)
     throw new Error("Failed to fetch product data metrics")

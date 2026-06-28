@@ -17,22 +17,28 @@ export class SlotRepository {
     return this.toEntity(slot)
   }
 
-  /** Set a slot's current quantity to an absolute value. */
+  /** Set a slot's current quantity to an absolute value (a real count → stamps lastCountedAt). */
   async setSlotQuantity(slotId: string, quantity: number): Promise<void> {
+    const now = new Date()
     await this.database
       .update(slots)
-      .set({ currentQuantity: quantity, updatedAt: new Date() })
+      .set({ currentQuantity: quantity, lastCountedAt: now, updatedAt: now })
       .where(eq(slots.id, slotId))
   }
 
-  /** Update individual slot fields (price/quantity/capacity) without rebuilding the entity. */
+  /** Update individual slot fields (price/quantity/capacity) without rebuilding the entity.
+   * Stamps lastCountedAt only when currentQuantity is set (a real count). */
   async updateSlotFields(
     slotId: string,
     fields: { price?: number; currentQuantity?: number; capacity?: number }
   ): Promise<void> {
-    const set: Record<string, unknown> = { updatedAt: new Date() }
+    const now = new Date()
+    const set: Record<string, unknown> = { updatedAt: now }
     if (fields.price !== undefined) set.price = fields.price.toString()
-    if (fields.currentQuantity !== undefined) set.currentQuantity = fields.currentQuantity
+    if (fields.currentQuantity !== undefined) {
+      set.currentQuantity = fields.currentQuantity
+      set.lastCountedAt = now
+    }
     if (fields.capacity !== undefined) set.capacity = fields.capacity
     await this.database.update(slots).set(set).where(eq(slots.id, slotId))
   }
@@ -129,6 +135,7 @@ export class SlotRepository {
             price: saveSlot.price.toString(),
             capacity: saveSlot.capacity,
             currentQuantity: saveSlot.currentQuantity,
+            lastCountedAt: new Date(),
             organizationId,
             sequenceNumber: i,
             createdAt: new Date(),
@@ -149,6 +156,7 @@ export class SlotRepository {
               price: saveSlot.price.toString(),
               capacity: saveSlot.capacity,
               currentQuantity: saveSlot.currentQuantity,
+              lastCountedAt: new Date(),
               organizationId,
               sequenceNumber: i,
               updatedAt: new Date(),
@@ -198,6 +206,7 @@ export class SlotRepository {
       price: Number(data.price),
       capacity: data.capacity ?? 10,
       currentQuantity: data.currentQuantity ?? 0,
+      lastCountedAt: data.lastCountedAt,
       sequenceNumber: data.sequenceNumber,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,

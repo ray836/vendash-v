@@ -2,6 +2,7 @@ import { Product } from "./entities/Product"
 import { ProductRepository } from "@/infrastructure/repositories/ProductRepository"
 import { PublicProductDTO, PublicProductWithInventorySalesOrderDataDTO } from "./schemas/ProductSchemas"
 import { weightedAvgDailySales } from "@/domains/Inventory/inventoryForecast"
+import { projectSlotQuantities, type ProjectableSlot } from "@/domains/Inventory/projection"
 
 export async function getOrgProducts(
   repo: ProductRepository,
@@ -26,7 +27,8 @@ export async function getOrgProducts(
 
 export async function getOrgProductDataMetrics(
   repo: ProductRepository,
-  organizationId: string
+  organizationId: string,
+  slots: ProjectableSlot[] = []
 ): Promise<PublicProductWithInventorySalesOrderDataDTO[]> {
   const salesEndDate = new Date()
   const salesStartDate = new Date(salesEndDate.getFullYear() - 1, salesEndDate.getMonth(), salesEndDate.getDate())
@@ -36,13 +38,32 @@ export async function getOrgProductDataMetrics(
     salesEndDate
   )
 
+  // Project current in-machine stock from slot counts + velocity (slots = source
+  // of truth), so Days Left depletes between restocks instead of staying static.
+  const velocityByProduct = new Map<string, number>(
+    products.map((p) => [p.product.id, weightedAvgDailySales(p.salesAgg.unitsSold7, p.salesAgg.unitsSold35)])
+  )
+  const projectedQtyById = projectSlotQuantities(slots, velocityByProduct)
+  const projectedMachinesByProduct = new Map<string, number>()
+  const productsWithSlots = new Set<string>()
+  for (const s of slots) {
+    if (!s.productId) continue
+    productsWithSlots.add(s.productId)
+    projectedMachinesByProduct.set(
+      s.productId,
+      (projectedMachinesByProduct.get(s.productId) ?? 0) + (projectedQtyById.get(s.id) ?? s.currentQuantity)
+    )
+  }
+
   return products.map((product) => {
     const { totalSales, totalUnitsSold, totalRevenue, unitsSold7, unitsSold35 } = product.salesAgg
     // Same weighted velocity the ordering logic uses, so "Days Left" matches reorder alerts
     const averageDailySales = weightedAvgDailySales(unitsSold7, unitsSold35)
     const salesVelocity = averageDailySales
-    const currentInventory =
-      (product.inventory.storage || 0) + (product.inventory.machines || 0)
+    const machinesOnHand = productsWithSlots.has(product.product.id)
+      ? projectedMachinesByProduct.get(product.product.id) ?? 0
+      : product.inventory.machines || 0
+    const currentInventory = (product.inventory.storage || 0) + machinesOnHand
     const daysToSellOut =
       currentInventory > 0 && averageDailySales > 0
         ? currentInventory / averageDailySales

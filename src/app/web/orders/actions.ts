@@ -23,6 +23,7 @@ import {
   shelfLifeCappedCases,
   sellsThroughBeforeExpiry,
 } from "@/domains/Inventory/inventoryForecast"
+import { projectSlotQuantities } from "@/domains/Inventory/projection"
 
 export async function testAddItemToOrder() {
   const session = await auth()
@@ -286,18 +287,27 @@ export async function getInventoryOrderSuggestions() {
       }
     }
 
+    // Project current slot quantities (depletes since last count) so deficits +
+    // on-hand reflect reality between restocks.
+    const velocityByProduct = new Map<string, number>()
+    for (const pid of new Set([...salesMap35.keys(), ...salesMap7.keys()])) {
+      velocityByProduct.set(pid, weightedAvgDailySales(salesMap7.get(pid) ?? 0, salesMap35.get(pid) ?? 0))
+    }
+    const projectedQtyById = projectSlotQuantities(allSlots, velocityByProduct, now)
+
     const slotsByProduct = new Map<string, { totalCapacity: number; totalCurrentQty: number; machineIds: Set<string> }>()
     for (const slot of allSlots) {
       if (!slot.productId) continue
+      const projQty = projectedQtyById.get(slot.id) ?? slot.currentQuantity
       const existing = slotsByProduct.get(slot.productId)
       if (existing) {
         existing.totalCapacity += slot.capacity
-        existing.totalCurrentQty += slot.currentQuantity
+        existing.totalCurrentQty += projQty
         existing.machineIds.add(slot.machineId)
       } else {
         slotsByProduct.set(slot.productId, {
           totalCapacity: slot.capacity,
-          totalCurrentQty: slot.currentQuantity,
+          totalCurrentQty: projQty,
           machineIds: new Set([slot.machineId]),
         })
       }
@@ -327,7 +337,8 @@ export async function getInventoryOrderSuggestions() {
 
       const inv = inventoryMap.get(productId)
       const storageQty = inv?.storage ?? 0
-      const machinesQty = inv?.machines ?? 0
+      // Projected units currently in machines (slots are the source of truth)
+      const machinesQty = slotData.totalCurrentQty
       const currentInventory = storageQty + machinesQty
       const caseSize = Number(product.caseSize) || 1
 
@@ -680,18 +691,26 @@ export async function autoPopulateOrder(
       }
     }
 
-    // Build slot aggregates per product
+    // Project current slot quantities (depletes since last count)
+    const velocityByProduct = new Map<string, number>()
+    for (const pid of new Set([...salesMap35.keys(), ...salesMap7.keys()])) {
+      velocityByProduct.set(pid, weightedAvgDailySales(salesMap7.get(pid) ?? 0, salesMap35.get(pid) ?? 0))
+    }
+    const projectedQtyById = projectSlotQuantities(allSlots, velocityByProduct, now)
+
+    // Build slot aggregates per product (using projected on-hand)
     const slotsByProduct = new Map<string, { totalCapacity: number; totalCurrentQty: number }>()
     for (const slot of allSlots) {
       if (!slot.productId) continue
+      const projQty = projectedQtyById.get(slot.id) ?? slot.currentQuantity
       const existing = slotsByProduct.get(slot.productId)
       if (existing) {
         existing.totalCapacity += slot.capacity
-        existing.totalCurrentQty += slot.currentQuantity
+        existing.totalCurrentQty += projQty
       } else {
         slotsByProduct.set(slot.productId, {
           totalCapacity: slot.capacity,
-          totalCurrentQty: slot.currentQuantity,
+          totalCurrentQty: projQty,
         })
       }
     }
@@ -714,7 +733,7 @@ export async function autoPopulateOrder(
 
       const inv = inventoryMap.get(productId)
       const storageQty = inv?.storage ?? 0
-      const currentInventory = storageQty + (inv?.machines ?? 0)
+      const currentInventory = storageQty + slotData.totalCurrentQty
       const caseSize = Number(product.caseSize) || 1
       const caseCost = Number(product.caseCost) || 0
 

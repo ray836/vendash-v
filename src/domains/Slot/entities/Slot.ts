@@ -23,6 +23,7 @@ export class Slot {
       sequenceNumber: props.sequenceNumber || 0,
       capacity: props.capacity || 0,
       currentQuantity: props.currentQuantity || 0,
+      lastCountedAt: props.lastCountedAt ?? null,
       createdAt: props.createdAt || now,
       updatedAt: props.updatedAt || now,
       createdBy: props.createdBy || "system",
@@ -72,6 +73,10 @@ export class Slot {
 
   public get currentQuantity(): number {
     return this.props.currentQuantity
+  }
+
+  public get lastCountedAt(): Date | null | undefined {
+    return this.props.lastCountedAt
   }
 
   public get row(): string | undefined {

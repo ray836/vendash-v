@@ -6,7 +6,10 @@ import { VendingMachineRepository } from "@/infrastructure/repositories/VendingM
 import { LocationRepository } from "@/infrastructure/repositories/LocationRepository"
 import { InventoryRepository } from "@/infrastructure/repositories/InventoryRepository"
 import { SlotRepository } from "@/infrastructure/repositories/SlotRepository"
+import { TransactionRepository } from "@/infrastructure/repositories/TransactionRepository"
 import * as PreKitService from "@/domains/PreKit/PreKitService"
+import { weightedAvgDailySales } from "@/domains/Inventory/inventoryForecast"
+import { projectSlotQuantities } from "@/domains/Inventory/projection"
 import { auth } from "@/lib/auth"
 
 const RESTOCK_THRESHOLD = 30 // % — slots at or below this are flagged
@@ -22,24 +25,48 @@ export async function getMachinesWithRestockStatus() {
     const preKitRepo = new PreKitRepository(db)
     const inventoryRepo = new InventoryRepository(db)
     const slotRepo = new SlotRepository(db)
+    const txRepo = new TransactionRepository(db)
 
-    const [machines, locations, preKits, inventoryList, allSlots] = await Promise.all([
+    const now = new Date()
+    const start35Days = new Date(now.getTime() - 35 * 24 * 60 * 60 * 1000)
+    const start7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+    const [machines, locations, preKits, inventoryList, allSlots, txData] = await Promise.all([
       machineRepo.findByOrganizationId(organizationId),
       locationRepo.findByOrganizationId(organizationId),
       PreKitService.getOrgPreKits(preKitRepo, organizationId),
       inventoryRepo.findByOrganizationId(organizationId),
       slotRepo.findByOrganizationId(organizationId),
+      txRepo.findByOrganizationIdWithItems(organizationId, start35Days, now),
     ])
 
     const locationMap = new Map(locations.map((l) => [l.id, l.name]))
     const inventoryMap = new Map(inventoryList.map((inv) => [inv.productId, inv.storage]))
 
-    // Compute per-machine slot stats
+    // Project current slot quantities so "needs filling" reflects sales between visits
+    const salesMap35 = new Map<string, number>()
+    const salesMap7 = new Map<string, number>()
+    for (const tx of txData) {
+      for (const item of tx.items) {
+        if (!item.productId) continue
+        salesMap35.set(item.productId, (salesMap35.get(item.productId) ?? 0) + item.quantity)
+        if (new Date(tx.createdAt) >= start7Days) {
+          salesMap7.set(item.productId, (salesMap7.get(item.productId) ?? 0) + item.quantity)
+        }
+      }
+    }
+    const velocityByProduct = new Map<string, number>()
+    for (const pid of new Set([...salesMap35.keys(), ...salesMap7.keys()])) {
+      velocityByProduct.set(pid, weightedAvgDailySales(salesMap7.get(pid) ?? 0, salesMap35.get(pid) ?? 0))
+    }
+    const projectedQtyById = projectSlotQuantities(allSlots, velocityByProduct, now)
+
+    // Compute per-machine slot stats (using projected on-hand)
     const slotsByMachine = new Map<string, { total: number; low: number; empty: number }>()
     for (const slot of allSlots) {
       if (!slot.productId) continue // unassigned slot, skip
       const cap = slot.capacity ?? 10
-      const qty = slot.currentQuantity ?? 0
+      const qty = projectedQtyById.get(slot.id) ?? slot.currentQuantity ?? 0
       const fillPct = cap > 0 ? (qty / cap) * 100 : 100
       const stats = slotsByMachine.get(slot.machineId) ?? { total: 0, low: 0, empty: 0 }
       stats.total++

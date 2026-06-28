@@ -23,6 +23,7 @@ const base = z.object({
   sequenceNumber: z.number().min(1),
   capacity: z.number().min(0),
   currentQuantity: z.number().min(0),
+  lastCountedAt: z.date().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
   createdBy: z.string(),
@@ -43,6 +44,7 @@ const publicSlot = base.pick({
   sequenceNumber: true,
   capacity: true,
   currentQuantity: true,
+  lastCountedAt: true,
 })
 
 const publicSlotWithProduct = publicSlot.extend({
