@@ -453,7 +453,27 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
             Welcome back — here&apos;s how your machines are doing
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {/* Global period control — drives KPIs, chart, and machine blocks */}
+          <div className="flex rounded-md border overflow-hidden text-sm">
+            {[
+              { v: GroupByType.DAY, l: "Today" },
+              { v: GroupByType.WEEK, l: "This Week" },
+              { v: GroupByType.MONTH, l: "This Month" },
+            ].map((opt) => (
+              <button
+                key={opt.v}
+                onClick={() => setSalesPeriod(opt.v)}
+                className={`px-3 py-1.5 transition-colors ${
+                  salesPeriod === opt.v
+                    ? "bg-primary text-primary-foreground font-medium"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {opt.l}
+              </button>
+            ))}
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -525,39 +545,41 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
       {(() => {
         const hasMachineIssues = !statsLoading && (stats?.totalMachines ?? 0) - (stats?.activeMachines ?? 0) > 0
         const cols = hasMachineIssues ? "lg:grid-cols-4" : "lg:grid-cols-3"
+        const pk = stats?.periodKpis?.[salesPeriod]
+        const periodLabel = salesPeriod === GroupByType.DAY ? "today" : salesPeriod === GroupByType.WEEK ? "this week" : "this month"
+        const prevLabel = salesPeriod === GroupByType.DAY ? "yesterday" : salesPeriod === GroupByType.WEEK ? "last week" : "last month"
         return (
         <div className={`grid grid-cols-1 md:grid-cols-2 ${cols} gap-4`}>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Today&apos;s Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium capitalize">Revenue {periodLabel}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center">
               <span className="text-2xl font-bold">
                 {statsLoading
                   ? "—"
-                  : `$${(stats?.todayRevenue ?? 0).toLocaleString(undefined, {
+                  : `$${(pk?.revenue ?? 0).toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}`}
               </span>
             </div>
             <div className="flex items-center gap-1 mt-1">
-              {!statsLoading && stats?.todayVsYesterdayPct != null ? (
+              {!statsLoading && pk?.deltaPct != null ? (
                 <>
-                  {stats.todayVsYesterdayPct >= 0 ? (
+                  {pk.deltaPct >= 0 ? (
                     <TrendingUp className="h-3 w-3 text-green-600" />
                   ) : (
                     <TrendingDown className="h-3 w-3 text-red-500" />
                   )}
-                  <p className={`text-xs font-medium ${stats.todayVsYesterdayPct >= 0 ? "text-green-600" : "text-red-500"}`}>
-                    {stats.todayVsYesterdayPct >= 0 ? "+" : ""}{stats.todayVsYesterdayPct.toFixed(0)}% vs yesterday at {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                  <p className={`text-xs font-medium ${pk.deltaPct >= 0 ? "text-green-600" : "text-red-500"}`}>
+                    {pk.deltaPct >= 0 ? "+" : ""}{pk.deltaPct.toFixed(0)}% vs {prevLabel}
+                    {salesPeriod === GroupByType.DAY ? ` at ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}
                   </p>
                 </>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  {statsLoading ? "" : `$${(stats?.yesterdayRevenue ?? 0).toFixed(2)} yesterday`}
-                </p>
+                <p className="text-xs text-muted-foreground">&nbsp;</p>
               )}
             </div>
           </CardContent>
@@ -587,19 +609,20 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              {statsLoading ? "—" : stats?.hasCostData ? "Est. Monthly Profit" : "Monthly Revenue"}
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Est. Profit</CardTitle>
           </CardHeader>
           <CardContent>
             <span className="text-2xl font-bold">
               {statsLoading
                 ? "—"
-                : `$${((stats?.hasCostData ? stats?.monthProfit : stats?.monthRevenue) ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              }
+                : pk?.hasCostData
+                ? `$${(pk?.profit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : "—"}
             </span>
             <p className="text-xs text-muted-foreground mt-1">
-              {stats?.hasCostData ? "after estimated product costs" : "add product costs to see profit"}
+              {pk?.hasCostData
+                ? `after costs · ${pk?.margin ?? 0}% margin`
+                : "add product costs to see profit"}
             </p>
           </CardContent>
         </Card>
@@ -686,19 +709,6 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
                     <Maximize2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
-                <Select
-                  value={salesPeriod}
-                  onValueChange={(value: GroupByType) => setSalesPeriod(value)}
-                >
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Select period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={GroupByType.DAY}>Daily</SelectItem>
-                    <SelectItem value={GroupByType.WEEK}>Weekly</SelectItem>
-                    <SelectItem value={GroupByType.MONTH}>Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
             <CardDescription className="mb-4">
@@ -777,17 +787,6 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
             )}
           </CardContent>
           <CardFooter className="flex justify-between border-t pt-4">
-            <div>
-              <p className="text-sm font-medium">
-                {salesPeriod === GroupByType.DAY ? "Today's Revenue" : salesPeriod === GroupByType.WEEK ? "This Week's Revenue" : "This Month's Revenue"}
-              </p>
-              <p className="text-2xl font-bold">
-                {statsLoading ? "—" : (() => {
-                  const val = (salesPeriod === GroupByType.DAY ? stats?.todayRevenue : salesPeriod === GroupByType.WEEK ? stats?.weekRevenue : stats?.monthRevenue) ?? 0
-                  return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                })()}
-              </p>
-            </div>
             <div>
               <p className="text-sm font-medium">
                 Avg{" "}

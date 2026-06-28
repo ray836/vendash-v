@@ -346,8 +346,43 @@ export async function getDashboardData() {
     })
     .map((p) => ({ id: p.product.id, name: p.product.name }))
 
+  // Period KPIs for the global Today/Week/Month dashboard control.
+  // Reuses computePeriodStats org-wide; prev-period revenue drives the delta.
+  const dayStats = computePeriodStats(transactions, startOfToday)
+  const weekStats = computePeriodStats(transactions, startOfWeek)
+  const monthStats = computePeriodStats(transactions, startOfMonth)
+  const prevWeekRevenue = computePeriodStats(transactions, startOfLastWeek, startOfWeek).revenue
+  const prevMonthRevenue = computePeriodStats(transactions, startOfPrevMonth, startOfMonth).revenue
+  const pctDelta = (cur: number, prev: number) =>
+    prev === 0 ? null : ((cur - prev) / prev) * 100
+
+  const periodKpis = {
+    day: {
+      revenue: dayStats.revenue,
+      profit: dayStats.profit,
+      margin: dayStats.margin,
+      deltaPct: todayVsYesterdayPct,
+      hasCostData: dayStats.profit !== null,
+    },
+    week: {
+      revenue: weekStats.revenue,
+      profit: weekStats.profit,
+      margin: weekStats.margin,
+      deltaPct: pctDelta(weekStats.revenue, prevWeekRevenue),
+      hasCostData: weekStats.profit !== null,
+    },
+    month: {
+      revenue: monthStats.revenue,
+      profit: monthStats.profit,
+      margin: monthStats.margin,
+      deltaPct: pctDelta(monthStats.revenue, prevMonthRevenue),
+      hasCostData: monthStats.profit !== null,
+    },
+  }
+
   return {
     machines: machinesWithRevenue,
+    periodKpis,
     totalMachines,
     activeMachines,
     lowStockCount: lowStockProducts.length,
