@@ -13,6 +13,7 @@ import {
   X,
   AlertTriangle,
   Trash2,
+  Pencil,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -46,7 +47,16 @@ import {
   getMachineTransactions,
 } from "./actions"
 import { deleteMachine, updateMachineStatus } from "../actions"
+import { updateMachineInfo, updateMachine, getLocationsServer } from "./setup/actions"
 import { RestockCountDialog } from "./restock-count-dialog"
+import { MachineSettingsDialog } from "./setup/MachineSettingsDialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { toast } from "@/hooks/use-toast"
 import { MachineDetailDataDTO } from "@/domains/VendingMachine/schemas/vendingMachineDTOs"
 import { PublicSlotDTO } from "@/domains/Slot/schemas/SlotSchemas"
 import { PublicSlotWithProductDTO } from "@/domains/Slot/schemas/SlotSchemas"
@@ -153,6 +163,9 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
   const isMobile = useIsMobile()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isSavingInfo, setIsSavingInfo] = useState(false)
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([])
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [txPage, setTxPage] = useState(1)
   const TX_PAGE_SIZE = 15
@@ -215,6 +228,12 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
   }, [id])
 
   useEffect(() => {
+    getLocationsServer()
+      .then((locs) => setLocations(locs.map((l: { id: string; name: string }) => ({ id: l.id, name: l.name }))))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (machineData) {
       fetchPreKit()
     }
@@ -254,6 +273,39 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
     machineData
   const isSetup = setup.status === "complete"
   const setupPercentage = setup.percentage
+
+  const refetchMachine = async () => {
+    try {
+      const data = await getMachineWithSlots(id)
+      setMachineData(data)
+    } catch (error) {
+      console.error("Failed to refresh machine:", error)
+    }
+  }
+
+  const handleSaveMachineInfo = async (info: { model: string; notes: string; locationId: string }) => {
+    setIsSavingInfo(true)
+    try {
+      const res = JSON.parse(await updateMachineInfo(id, info))
+      if (res.success) {
+        toast({ title: "Saved", description: "Machine details updated" })
+        await refetchMachine()
+        setIsEditOpen(false)
+      } else {
+        toast({ variant: "destructive", title: "Error", description: res.error || "Failed to save" })
+      }
+    } catch (error) {
+      console.error("updateMachineInfo:", error)
+      toast({ variant: "destructive", title: "Error", description: "Failed to save" })
+    } finally {
+      setIsSavingInfo(false)
+    }
+  }
+
+  const handleUpdateCardReader = async (cardReaderId: string) => {
+    await updateMachine(id, { cardReaderId })
+    await refetchMachine()
+  }
 
   const handleSetupClick = () => {
     router.push(`/web/machines/${id}/setup`)
@@ -687,6 +739,10 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
         </div>
         {/* Desktop buttons */}
         <div className="hidden sm:flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setIsEditOpen(true)}>
+            <Pencil className="h-4 w-4 mr-1" />
+            Edit
+          </Button>
           {!isSetup && (
             <Button size="sm" onClick={handleSetupClick}>
               Setup Machine
@@ -712,13 +768,33 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
         </div>
       </div>
       {/* Mobile buttons */}
-      {!isSetup && (
-        <div className="flex flex-col gap-2 mt-2 sm:hidden">
+      <div className="flex flex-col gap-2 mt-2 sm:hidden">
+        <Button size="sm" variant="outline" onClick={() => setIsEditOpen(true)}>
+          <Pencil className="h-4 w-4 mr-1" />
+          Edit machine
+        </Button>
+        {!isSetup && (
           <Button size="sm" onClick={handleSetupClick}>
             Setup Machine
           </Button>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Edit machine dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle>Edit machine</DialogTitle>
+          </DialogHeader>
+          <MachineSettingsDialog
+            machine={machine}
+            locations={locations}
+            onUpdate={handleUpdateCardReader}
+            onSaveMachineInfo={handleSaveMachineInfo}
+            isSavingInfo={isSavingInfo}
+          />
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-6 mt-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

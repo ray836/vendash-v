@@ -16,6 +16,8 @@ import {
   DollarSign,
   Activity,
   Maximize2,
+  CupSoda,
+  Cookie,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -248,7 +250,8 @@ function SalesChart({
                 <TooltipContent>
                   <div className="space-y-1">
                     <div className="font-semibold">
-                      {formatDateLabel(item.date, period)} ({dayOfWeek})
+                      {formatDateLabel(item.date, period)}
+                      {period === GroupByType.DAY ? ` (${dayOfWeek})` : ""}
                     </div>
                     <div className="flex justify-between gap-4">
                       <span className="text-muted-foreground">Revenue</span>
@@ -911,7 +914,6 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
                       : salesPeriod === GroupByType.WEEK
                       ? machine.statsPrevWeek
                       : machine.statsPrevMonth
-                    const periodLabel = salesPeriod === GroupByType.DAY ? "today" : salesPeriod === GroupByType.WEEK ? "this week" : "this month"
                     const marginColor = periodStats?.margin == null
                       ? ""
                       : periodStats.margin >= 30 ? "text-green-600" : periodStats.margin >= 15 ? "text-yellow-600" : "text-red-500"
@@ -943,10 +945,18 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
                     return (
                       <div key={machine.id} className="border rounded-lg p-4 flex flex-col gap-3">
                         {/* Header */}
-                        <div className="flex justify-between items-start">
-                          <div className="min-w-0">
-                            <p className="font-medium text-sm leading-tight">{machine.model}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{machine.locationName ?? machine.locationId}</p>
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <span
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+                              title={machine.type === "DRINK" ? "Drink machine" : "Snack machine"}
+                            >
+                              {machine.type === "DRINK" ? <CupSoda className="h-4 w-4" /> : <Cookie className="h-4 w-4" />}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm leading-tight truncate">{machine.model}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">{machine.locationName ?? machine.locationId}</p>
+                            </div>
                           </div>
                           <StatusBadge status={machine.status} />
                         </div>
@@ -979,14 +989,6 @@ export function Dashboard({ isFirstLogin = false }: { isFirstLogin?: boolean }) 
                                 <ChangeChip val={marChange} suffix="pts" />
                               </div>
                             </div>
-
-                            {/* Secondary info */}
-                            <p className="text-xs text-muted-foreground leading-tight">
-                              {periodStats?.txCount ?? 0} sales {periodLabel}
-                              {periodStats?.topProduct ? (
-                                <> · <span>Top: {periodStats.topProduct.length > 20 ? periodStats.topProduct.slice(0, 20) + "…" : periodStats.topProduct}</span></>
-                              ) : null}
-                            </p>
                           </>
                         )}
 
