@@ -25,6 +25,18 @@ export class SlotRepository {
       .where(eq(slots.id, slotId))
   }
 
+  /** Update individual slot fields (price/quantity/capacity) without rebuilding the entity. */
+  async updateSlotFields(
+    slotId: string,
+    fields: { price?: number; currentQuantity?: number; capacity?: number }
+  ): Promise<void> {
+    const set: Record<string, unknown> = { updatedAt: new Date() }
+    if (fields.price !== undefined) set.price = fields.price.toString()
+    if (fields.currentQuantity !== undefined) set.currentQuantity = fields.currentQuantity
+    if (fields.capacity !== undefined) set.capacity = fields.capacity
+    await this.database.update(slots).set(set).where(eq(slots.id, slotId))
+  }
+
   async findByMachineId(machineId: string): Promise<Slot[]> {
     const result = await this.database.select().from(slots).where(eq(slots.machineId, machineId))
     return result.map((slot) => this.toEntity(slot))

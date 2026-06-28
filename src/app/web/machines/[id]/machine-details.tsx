@@ -6,18 +6,13 @@ import {
   Package,
   Calendar,
   MapPin,
-  Plus,
-  Minus,
-  Check,
   Loader2,
   X,
-  AlertTriangle,
   Trash2,
   Pencil,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useTransition } from "react"
 import {
   Select,
   SelectContent,
@@ -41,13 +36,12 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   getMachineWithSlots,
-  createPreKit,
-  getMachinePreKit,
-  updatePreKitItems,
   getMachineTransactions,
+  updateSlot,
 } from "./actions"
 import { deleteMachine, updateMachineStatus } from "../actions"
-import { updateMachineInfo, updateMachine, getLocationsServer } from "./setup/actions"
+import { updateMachineInfo, updateMachine, getLocationsServer, getOrgProducts } from "./setup/actions"
+import { PublicProductDTO } from "@/domains/Product/schemas/ProductSchemas"
 import { RestockCountDialog } from "./restock-count-dialog"
 import { MachineSettingsDialog } from "./setup/MachineSettingsDialog"
 import {
@@ -67,8 +61,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { MachineType, MachineStatus } from "@/domains/VendingMachine/entities/VendingMachine"
-import { PublicPreKitItem } from "@/domains/PreKit/schemas/PrekitSchemas"
 import { GetTransactionsForMachineResponseDTO } from "@/domains/Transaction/schemas/GetTransactionsForMachineSchema"
 import { TransactionSchemas } from "@/domains/Transaction/schemas/TransactionSchemas"
 import { GroupByType } from "@/domains/Transaction/schemas/GetTransactionGraphDataSchemas"
@@ -78,12 +72,6 @@ import { ComparisonLineChart } from "@/components/ComparisonLineChart"
 interface MachineDetailsProps {
   id: string
   defaultTab?: string
-}
-
-interface PreKitItem extends PublicPreKitItem {
-  currentQuantity: number
-  capacity: number
-  slotCode: string
 }
 
 function calculateOverallInventory(slots: PublicSlotDTO[]) {
@@ -148,13 +136,13 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
     null
   )
   const [isLoading, setIsLoading] = useState(true)
-  const [preKitItems, setPreKitItems] = useState<PreKitItem[]>([])
-  const [isPending, startTransition] = useTransition()
-  const [isLoadingPreKit, setIsLoadingPreKit] = useState(false)
-  const [hasExistingPreKit, setHasExistingPreKit] = useState(false)
-  const [isEditingPreKit, setIsEditingPreKit] = useState(false)
-  const [isCreatingPreKit, setIsCreatingPreKit] = useState(false)
-  const [preKitStatus, setPreKitStatus] = useState<"OPEN" | "PICKED" | "STOCKED" | null>(null)
+  // Overview slot quick-edit panel
+  const [activeTab, setActiveTab] = useState(defaultTab)
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
+  const [orgProducts, setOrgProducts] = useState<PublicProductDTO[]>([])
+  const [slotPriceDraft, setSlotPriceDraft] = useState("")
+  const [slotQtyDraft, setSlotQtyDraft] = useState("")
+  const [savingSlot, setSavingSlot] = useState(false)
   const [salesData, setSalesData] =
     useState<GetTransactionsForMachineResponseDTO | null>(null)
   const [isLoadingSales, setIsLoadingSales] = useState(false)
@@ -169,48 +157,6 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [txPage, setTxPage] = useState(1)
   const TX_PAGE_SIZE = 15
-
-  const fetchPreKit = async () => {
-    if (!machineData) return
-
-    setIsLoadingPreKit(true)
-    try {
-      const result = await getMachinePreKit(id)
-      if (result.success && result.data) {
-        setHasExistingPreKit(true)
-        setPreKitStatus(result.data.status as "OPEN" | "PICKED" | "STOCKED")
-        // Convert pre-kit items to PreKitItem format
-        const items = result.data.items
-          .map((item) => {
-            const slot = machineData.slots.find((s) => s.id === item.slotId)
-            if (!slot) return null
-            const preKitItem: PreKitItem = {
-              id: item.id,
-              productId: item.productId,
-              slotId: item.slotId,
-              quantity: item.quantity,
-              productImage: slot.productImage ?? "",
-              productName: slot.productName,
-              preKitId: item.preKitId,
-              currentQuantity: slot.currentQuantity,
-              capacity: slot.capacity,
-              slotCode: slot.labelCode,
-              inStock: item.inStock,
-            }
-            return preKitItem
-          })
-          .filter((item): item is PreKitItem => item !== null)
-        setPreKitItems(items)
-      } else {
-        setHasExistingPreKit(false)
-      }
-    } catch (error) {
-      console.error("Failed to fetch pre-kit:", error)
-      setHasExistingPreKit(false)
-    } finally {
-      setIsLoadingPreKit(false)
-    }
-  }
 
   useEffect(() => {
     const fetchMachineData = async () => {
@@ -231,13 +177,10 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
     getLocationsServer()
       .then((locs) => setLocations(locs.map((l: { id: string; name: string }) => ({ id: l.id, name: l.name }))))
       .catch(() => {})
+    getOrgProducts()
+      .then((prods) => setOrgProducts(prods))
+      .catch(() => {})
   }, [])
-
-  useEffect(() => {
-    if (machineData) {
-      fetchPreKit()
-    }
-  }, [id, machineData])
 
   const fetchSalesData = async () => {
     try {
@@ -342,119 +285,38 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
     }).format(new Date(date))
   }
 
-  const handleSlotClick = (slot: PublicSlotWithProductDTO) => {
-    if (!isEditingPreKit && !isCreatingPreKit) return
+  const handleSelectSlot = (slot: PublicSlotWithProductDTO) => {
+    setSelectedSlotId(slot.id)
+    setSlotPriceDraft(slot.price ? String(slot.price) : "")
+    setSlotQtyDraft(String(slot.currentQuantity))
+  }
 
-    if (!slot.productId) return
-
-    const existingItem = preKitItems.find((item) => item.slotId === slot.id)
-    if (existingItem) {
-      setPreKitItems(preKitItems.filter((item) => item.slotId !== slot.id))
-    } else {
-      const quantityNeeded = slot.capacity - slot.currentQuantity
-      setPreKitItems([
-        ...preKitItems,
-        {
-          id: crypto.randomUUID(),
-          productId: slot.productId,
-          slotId: slot.id!, // Add non-null assertion since we know productId exists
-          quantity: quantityNeeded,
-          productImage: slot.productImage ?? "",
-          productName: slot.productName,
-          preKitId: "",
-          currentQuantity: slot.currentQuantity,
-          capacity: slot.capacity,
-          slotCode: slot.labelCode,
-        },
-      ])
+  const handleSaveSlot = async () => {
+    if (!selectedSlotId) return
+    setSavingSlot(true)
+    try {
+      const res = await updateSlot(selectedSlotId, {
+        price: slotPriceDraft === "" ? 0 : Math.max(0, parseFloat(slotPriceDraft) || 0),
+        currentQuantity: slotQtyDraft === "" ? 0 : Math.max(0, parseInt(slotQtyDraft, 10) || 0),
+      })
+      if (res.success) {
+        toast({ title: "Saved", description: "Slot updated" })
+        await refetchMachine()
+      } else {
+        toast({ variant: "destructive", title: "Error", description: res.error || "Failed to update slot" })
+      }
+    } catch (error) {
+      console.error("updateSlot:", error)
+      toast({ variant: "destructive", title: "Error", description: "Failed to update slot" })
+    } finally {
+      setSavingSlot(false)
     }
   }
 
-  const updatePreKitItemQuantity = (slotId: string, newQuantity: number) => {
-    setPreKitItems(
-      preKitItems.map((item) =>
-        item.slotId === slotId
-          ? {
-              ...item,
-              quantity: Math.max(
-                0,
-                Math.min(
-                  newQuantity,
-                  machineData.slots.find((s) => s.id === item.slotId)
-                    ?.capacity ??
-                    0 -
-                      (machineData.slots.find((s) => s.id === item.slotId)
-                        ?.currentQuantity ?? 0)
-                )
-              ),
-            }
-          : item
-      )
-    )
-  }
-
-  const handleEditPreKit = () => {
-    setIsEditingPreKit(true)
-  }
-
-  const handleCancelEdit = () => {
-    fetchPreKit()
-    setIsEditingPreKit(false)
-    setIsCreatingPreKit(false)
-  }
-
-  const handleCreatePreKit = async () => {
-    if (!machineData || preKitItems.length === 0) return
-
-    startTransition(async () => {
-      try {
-        let result
-
-        if (hasExistingPreKit) {
-          // Get the pre-kit ID from the machine data
-          const preKitResult = await getMachinePreKit(id)
-          if (!preKitResult.success || !preKitResult.data) {
-            throw new Error("Failed to get pre-kit data")
-          }
-
-          // Update existing pre-kit
-          result = await updatePreKitItems(
-            preKitResult.data.id,
-            preKitItems.map((item) => ({
-              id: item.id ?? undefined,
-              productId: item.productId,
-              slotId: item.slotId,
-              quantity: item.quantity,
-            }))
-          )
-        } else {
-          // Create new pre-kit
-          result = await createPreKit(
-            id,
-            preKitItems.map((item) => ({
-              productId: item.productId,
-              slotId: item.slotId,
-              quantity: item.quantity,
-            }))
-          )
-        }
-
-        if (!result.success) {
-          throw new Error(result.error)
-        }
-
-        // Refresh the pre-kit data
-        await fetchPreKit()
-        setIsEditingPreKit(false)
-        setIsCreatingPreKit(false)
-      } catch (error) {
-        console.error("Failed to create/update pre-kit:", error)
-      }
-    })
-  }
-
-  const handleRemoveItem = (slotId: string) => {
-    setPreKitItems(preKitItems.filter((item) => item.slotId !== slotId))
+  // From Product Performance: jump to Overview and select the product's slot
+  const jumpToSlot = (slot: PublicSlotWithProductDTO) => {
+    setActiveTab("overview")
+    handleSelectSlot(slot)
   }
 
 
@@ -872,7 +734,7 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
           */}
         </div>
 
-        <Tabs defaultValue={defaultTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="sales">Sales</TabsTrigger>
@@ -914,20 +776,20 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
                                         <div
                                           key={slot.id}
                                           className={`
-                                            border rounded-md bg-muted/20 aspect-square relative
+                                            border rounded-md bg-muted/20 aspect-square relative cursor-pointer transition-colors
                                             ${
                                               slot.currentQuantity > 0
                                                 ? "border-primary/30"
                                                 : ""
                                             }
                                             ${
-                                              slot.productId && (isEditingPreKit || isCreatingPreKit)
-                                                ? "cursor-pointer hover:bg-primary/20"
-                                                : ""
+                                              selectedSlotId === slot.id
+                                                ? "ring-2 ring-primary border-primary"
+                                                : "hover:bg-primary/10"
                                             }
                                             overflow-hidden
                                           `}
-                                          onClick={() => handleSlotClick(slot)}
+                                          onClick={() => handleSelectSlot(slot)}
                                         >
                                           {slot.productImage && (
                                             <div
@@ -950,14 +812,6 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
                                                   {slot.currentQuantity}/
                                                   {slot.capacity}
                                                 </span>
-                                                {preKitItems.some(
-                                                  (item) =>
-                                                    item.slotId === slot.id
-                                                ) && (
-                                                  <span className="absolute bottom-1 left-1 text-primary">
-                                                    <Check className="h-4 w-4" />
-                                                  </span>
-                                                )}
                                               </>
                                             )}
                                           </div>
@@ -978,199 +832,120 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
                       </div>
                     </div>
                   </div>
+                  {/* Slot detail / quick-edit panel */}
                   <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-medium">Pre-Kit</h3>
-                        {preKitStatus && !isCreatingPreKit && !isEditingPreKit && (
-                          <Badge
-                            className={
-                              preKitStatus === "STOCKED"
-                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                                : preKitStatus === "PICKED"
-                                ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                            }
-                          >
-                            {preKitStatus}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                        <div className="space-y-4">
-                          {isLoadingPreKit ? (
-                            <div className="flex items-center justify-center py-8">
-                              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                            </div>
-                          ) : !hasExistingPreKit && !isCreatingPreKit ? (
-                            <div className="flex flex-col items-center justify-center py-6 gap-3 text-center">
-                              <p className="text-sm text-muted-foreground">No pre-kit for this machine yet.</p>
-                              <Button className="w-full" onClick={() => { setIsCreatingPreKit(true); setPreKitItems([]) }}>
-                                Create Pre-Kit
-                              </Button>
-                            </div>
-                          ) : isCreatingPreKit && preKitItems.length === 0 ? (
-                            <div className="space-y-4">
-                              <div className="text-center text-sm text-muted-foreground py-4">
-                                Click slots in the machine layout to add items to your pre-kit
-                              </div>
-                              <Button variant="outline" className="w-full" onClick={handleCancelEdit}>
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
+                    {(() => {
+                      const selected = selectedSlotId ? slots.find((s) => s.id === selectedSlotId) : null
+                      if (!selected) {
+                        return (
+                          <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center text-sm text-muted-foreground border rounded-lg p-6">
+                            Select a slot to view details and make quick edits.
+                          </div>
+                        )
+                      }
+                      const product = orgProducts.find((p) => p.id === selected.productId)
+                      const costPerUnit =
+                        product && Number(product.caseSize) > 0
+                          ? Number(product.caseCost) / Number(product.caseSize)
+                          : null
+                      const priceNum = slotPriceDraft === "" ? 0 : parseFloat(slotPriceDraft) || 0
+                      const liveMargin =
+                        costPerUnit !== null && priceNum > 0
+                          ? Math.round(((priceNum - costPerUnit) / priceNum) * 100)
+                          : null
+                      return (
+                        <div className="border rounded-lg p-4 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-medium">Slot {selected.labelCode}</h3>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setSelectedSlotId(null)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          {selected.productId ? (
                             <>
-                              <div className="space-y-2">
-                                {preKitItems.map((item) => {
-                                  const isShort = item.inStock !== undefined && item.quantity > item.inStock
-                                  return (
-                                  <div
-                                    key={item.slotId}
-                                    className="flex items-center justify-between p-2 border rounded-md"
-                                  >
-                                    <div className="flex items-center gap-3 flex-1">
-                                      <div className="w-12 h-12 rounded-md border bg-muted/20 relative overflow-hidden">
-                                        {item.productImage ? (
-                                          <div
-                                            className="absolute inset-0 bg-cover bg-center"
-                                            style={{
-                                              backgroundImage: `url(${item.productImage})`,
-                                            }}
-                                          />
-                                        ) : (
-                                          <Package className="h-6 w-6 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-muted-foreground" />
-                                        )}
-                                      </div>
-                                      <div>
-                                        <p className="text-sm font-medium">
-                                          {item.productName}
-                                        </p>
-                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                          <span className="font-medium">
-                                            Slot {item.slotCode}
-                                          </span>
-                                          <span>•</span>
-                                          <span>
-                                            Current: {item.currentQuantity}/
-                                            {item.capacity}
-                                          </span>
-                                          {item.inStock !== undefined && (
-                                            <span
-                                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
-                                                isShort
-                                                  ? "bg-red-950 text-red-400 border-red-800"
-                                                  : "bg-transparent text-muted-foreground border-border"
-                                              }`}
-                                            >
-                                              {isShort && <AlertTriangle className="h-2.5 w-2.5" />}
-                                              Stock: {item.inStock}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {(isEditingPreKit || isCreatingPreKit) ? (
-                                      <div className="flex items-center gap-2">
-                                        <Button
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8"
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            updatePreKitItemQuantity(
-                                              item.slotId,
-                                              item.quantity - 1
-                                            )
-                                          }}
-                                        >
-                                          <Minus className="h-4 w-4" />
-                                        </Button>
-                                        <Input
-                                          type="number"
-                                          value={item.quantity}
-                                          onChange={(e) =>
-                                            updatePreKitItemQuantity(
-                                              item.slotId,
-                                              parseInt(e.target.value) || 0
-                                            )
-                                          }
-                                          className="w-16 text-center"
-                                        />
-                                        <Button
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8"
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            updatePreKitItemQuantity(
-                                              item.slotId,
-                                              item.quantity + 1
-                                            )
-                                          }}
-                                        >
-                                          <Plus className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-destructive hover:text-destructive"
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            handleRemoveItem(item.slotId)
-                                          }}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <div className="text-sm font-medium">
-                                        Quantity: {item.quantity}
-                                      </div>
-                                    )}
-                                  </div>
-                                  )
-                                })}
+                              <div className="flex items-center gap-3">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={selected.productImage || "/placeholder.svg"}
+                                  alt={selected.productName}
+                                  className="w-12 h-12 object-contain shrink-0"
+                                />
+                                <Link
+                                  href={`/web/products/${selected.productId}`}
+                                  className="text-sm font-medium hover:underline"
+                                  target="_blank"
+                                >
+                                  {selected.productName}
+                                </Link>
                               </div>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                  <Label htmlFor="slot-price">Price</Label>
+                                  <Input
+                                    id="slot-price"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    placeholder={product ? `$${product.recommendedPrice.toFixed(2)}` : "0.00"}
+                                    value={slotPriceDraft}
+                                    onChange={(e) => setSlotPriceDraft(e.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label htmlFor="slot-qty">Quantity</Label>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      id="slot-qty"
+                                      type="number"
+                                      min="0"
+                                      max={selected.capacity}
+                                      value={slotQtyDraft}
+                                      onChange={(e) => setSlotQtyDraft(e.target.value)}
+                                    />
+                                    <span className="text-sm text-muted-foreground whitespace-nowrap">/ {selected.capacity}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {costPerUnit !== null && (
+                                <div className="rounded-md bg-muted/40 px-3 py-2 text-sm space-y-1">
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Cost / unit</span>
+                                    <span>${costPerUnit.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Margin</span>
+                                    <span className={`font-semibold ${liveMargin !== null && liveMargin < 0 ? "text-red-500" : "text-green-600"}`}>
+                                      {liveMargin !== null ? `${liveMargin}%` : "—"}
+                                    </span>
+                                  </div>
+                                  {liveMargin !== null && liveMargin < 0 && (
+                                    <p className="text-xs text-red-500">Losing money — raise the price above ${costPerUnit.toFixed(2)}.</p>
+                                  )}
+                                </div>
+                              )}
+
                               <div className="flex gap-2">
-                                {hasExistingPreKit && !isEditingPreKit ? (
-                                  <Button
-                                    className="flex-1"
-                                    onClick={handleEditPreKit}
-                                  >
-                                    Edit Pre-kit
-                                  </Button>
-                                ) : (
-                                  <>
-                                    {isEditingPreKit && (
-                                      <Button
-                                        variant="outline"
-                                        className="flex-1"
-                                        onClick={handleCancelEdit}
-                                      >
-                                        Cancel
-                                      </Button>
-                                    )}
-                                    <Button
-                                      className="flex-1"
-                                      onClick={handleCreatePreKit}
-                                      disabled={
-                                        isPending || preKitItems.length === 0
-                                      }
-                                    >
-                                      {isPending
-                                        ? "Processing..."
-                                        : hasExistingPreKit
-                                        ? "Update Pre-kit"
-                                        : "Create Pre-kit"}
-                                    </Button>
-                                  </>
-                                )}
+                                <Button onClick={handleSaveSlot} disabled={savingSlot} className="flex-1">
+                                  {savingSlot ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                                  Save
+                                </Button>
+                                <Button variant="outline" onClick={handleSetupClick}>Edit Configuration</Button>
                               </div>
                             </>
+                          ) : (
+                            <div className="text-sm text-muted-foreground space-y-3">
+                              <p>This slot is empty.</p>
+                              <Button variant="outline" className="w-full" onClick={handleSetupClick}>
+                                Assign a product
+                              </Button>
+                            </div>
                           )}
                         </div>
-                    </div>
+                      )
+                    })()}
                   </div>
                 </div>
               </CardContent>
@@ -1437,6 +1212,7 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
                                   <th className="text-right px-4 py-2 font-medium text-muted-foreground">Revenue</th>
                                   {hasCostData && <th className="text-right px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Est. Profit</th>}
                                   {hasCostData && <th className="text-right px-4 py-2 font-medium text-muted-foreground hidden sm:table-cell">Margin</th>}
+                                  <th className="px-4 py-2" />
                                 </tr>
                               </thead>
                               <tbody>
@@ -1464,6 +1240,21 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
                                           {p.margin !== null ? `${p.margin}%` : "—"}
                                         </td>
                                       )}
+                                      <td className="px-4 py-3 text-right">
+                                        {(() => {
+                                          const slot = slots.find((s) => s.productId === p.productId)
+                                          return slot ? (
+                                            <button
+                                              onClick={() => jumpToSlot(slot)}
+                                              className="text-xs text-primary hover:underline whitespace-nowrap"
+                                            >
+                                              Slot {slot.labelCode} →
+                                            </button>
+                                          ) : (
+                                            <span className="text-xs text-muted-foreground">not stocked</span>
+                                          )
+                                        })()}
+                                      </td>
                                     </tr>
                                   )
                                 })}

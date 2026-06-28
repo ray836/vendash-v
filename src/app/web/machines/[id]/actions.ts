@@ -124,6 +124,29 @@ export type RestockSlotInfo = {
 }
 
 /** Slots (with product info) for the restock count dialog. */
+/** Update a single slot's price and/or current quantity (Overview quick-edit panel). */
+export async function updateSlot(
+  slotId: string,
+  fields: { price?: number; currentQuantity?: number }
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { organizationId } = session.user
+
+  try {
+    const slotRepo = new SlotRepository(db)
+    const slot = await slotRepo.findById(slotId)
+    if (!slot || slot.organizationId !== organizationId) {
+      return { success: false, error: "Slot not found" }
+    }
+    await slotRepo.updateSlotFields(slotId, fields)
+    return { success: true }
+  } catch (error) {
+    console.error("updateSlot:", error)
+    return { success: false, error: "Failed to update slot" }
+  }
+}
+
 export async function getRestockSlots(
   machineId: string
 ): Promise<{ success: boolean; slots: RestockSlotInfo[]; hasTelemetry: boolean; error?: string }> {
