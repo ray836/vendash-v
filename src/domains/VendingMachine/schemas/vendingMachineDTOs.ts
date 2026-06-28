@@ -15,6 +15,7 @@ export const BaseVendingMachineDTO = z.object({
   ]),
   organizationId: z.string(),
   cardReaderId: z.string().optional(),
+  displayId: z.number().int().positive().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
   createdBy: z.string(),

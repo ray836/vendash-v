@@ -10,6 +10,10 @@ import {
   X,
   Trash2,
   Pencil,
+  LayoutGrid,
+  List,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -35,11 +39,19 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
   getMachineWithSlots,
   getMachineTransactions,
   updateSlot,
 } from "./actions"
-import { deleteMachine, updateMachineStatus } from "../actions"
+import { archiveMachine, updateMachineStatus } from "../actions"
 import { updateMachineInfo, updateMachine, getLocationsServer, getOrgProducts } from "./setup/actions"
 import { PublicProductDTO } from "@/domains/Product/schemas/ProductSchemas"
 import { RestockCountDialog } from "./restock-count-dialog"
@@ -116,6 +128,31 @@ const organizeSlotsByRow = (slots: PublicSlotWithProductDTO[]) => {
   }, {} as Record<string, PublicSlotWithProductDTO[]>)
 }
 
+// Per-slot unit economics derived from the slot price and the product's case cost.
+// Returns null cost/margin when the slot is empty or the product has no case data.
+const slotEconomics = (
+  slot: PublicSlotWithProductDTO,
+  products: PublicProductDTO[]
+): { costPerUnit: number | null; margin: number | null } => {
+  const product = products.find((p) => p.id === slot.productId)
+  const costPerUnit =
+    product && Number(product.caseSize) > 0
+      ? Number(product.caseCost) / Number(product.caseSize)
+      : null
+  const margin =
+    costPerUnit !== null && slot.price > 0
+      ? Math.round(((slot.price - costPerUnit) / slot.price) * 100)
+      : null
+  return { costPerUnit, margin }
+}
+
+const marginTextColor = (margin: number | null): string => {
+  if (margin === null) return "text-muted-foreground"
+  if (margin < 0) return "text-red-500"
+  if (margin < 30) return "text-amber-500"
+  return "text-green-600"
+}
+
 // Hook to detect mobile devices (width < 640px)
 function useIsMobile(breakpoint = 640) {
   const [isMobile, setIsMobile] = useState(false)
@@ -139,6 +176,12 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
   // Overview slot quick-edit panel
   const [activeTab, setActiveTab] = useState(defaultTab)
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
+  // Overview layout: visual grid vs. sortable list
+  const [overviewLayout, setOverviewLayout] = useState<"grid" | "list">("grid")
+  const [slotSort, setSlotSort] = useState<{ key: "slot" | "price" | "margin" | "fill"; dir: "asc" | "desc" }>({
+    key: "margin",
+    dir: "asc",
+  })
   const [orgProducts, setOrgProducts] = useState<PublicProductDTO[]>([])
   const [slotPriceDraft, setSlotPriceDraft] = useState("")
   const [slotQtyDraft, setSlotQtyDraft] = useState("")
@@ -271,7 +314,7 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
 
   const handleDelete = async () => {
     setIsDeleting(true)
-    await deleteMachine(id)
+    await archiveMachine(id)
     router.push('/web/machines')
   }
 
@@ -566,7 +609,8 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
           </Link>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">
-              Vending Machine {machine.id}
+              {machine.model} · {machine.type === "SNACK" ? "Snack" : "Drink"}
+              {machine.displayId && <span className="text-muted-foreground font-normal"> #{machine.displayId}</span>}
             </h1>
             <Select
               value={machine.status}
@@ -615,16 +659,16 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
           )}
           {confirmingDelete ? (
             <>
-              <span className="text-sm text-muted-foreground">Delete this machine?</span>
+              <span className="text-sm text-muted-foreground">Archive this machine?</span>
               <Button size="sm" variant="destructive" disabled={isDeleting} onClick={handleDelete}>
-                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Archive'}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setConfirmingDelete(false)}>Cancel</Button>
             </>
           ) : (
             <Button size="sm" variant="outline" onClick={() => setConfirmingDelete(true)}>
               <Trash2 className="h-4 w-4 mr-1" />
-              Delete
+              Archive
             </Button>
           )}
         </div>
@@ -755,10 +799,33 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-medium">Machine Layout</h3>
-                        <Button variant="outline" size="sm" onClick={handleSetupClick}>
-                          Edit Configuration
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <div className="inline-flex items-center rounded-md border p-0.5">
+                            <Button
+                              variant={overviewLayout === "grid" ? "secondary" : "ghost"}
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() => setOverviewLayout("grid")}
+                              aria-label="Grid view"
+                            >
+                              <LayoutGrid className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant={overviewLayout === "list" ? "secondary" : "ghost"}
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() => setOverviewLayout("list")}
+                              aria-label="List view"
+                            >
+                              <List className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={handleSetupClick}>
+                            Edit Configuration
+                          </Button>
+                        </div>
                       </div>
+                      {overviewLayout === "grid" ? (
                       <div className="space-y-4">
                         {Object.entries(organizeSlotsByRow(slots)).map(
                           ([row, rowSlots]) => (
@@ -830,6 +897,124 @@ export default function MachineDetails({ id, defaultTab = "overview" }: MachineD
                           )
                         )}
                       </div>
+                      ) : (
+                        (() => {
+                          const sortHead = (
+                            key: "slot" | "price" | "margin" | "fill",
+                            label: string
+                          ) => (
+                            <button
+                              onClick={() =>
+                                setSlotSort((s) => ({
+                                  key,
+                                  dir: s.key === key && s.dir === "asc" ? "desc" : "asc",
+                                }))
+                              }
+                              className="inline-flex items-center gap-1 hover:text-foreground"
+                            >
+                              {label}
+                              {slotSort.key === key &&
+                                (slotSort.dir === "asc" ? (
+                                  <ArrowUp className="h-3 w-3" />
+                                ) : (
+                                  <ArrowDown className="h-3 w-3" />
+                                ))}
+                            </button>
+                          )
+                          const rows = slots.map((s) => ({
+                            slot: s,
+                            ...slotEconomics(s, orgProducts),
+                          }))
+                          rows.sort((a, b) => {
+                            const aEmpty = !a.slot.productId
+                            const bEmpty = !b.slot.productId
+                            if (aEmpty !== bEmpty) return aEmpty ? 1 : -1
+                            const dir = slotSort.dir === "asc" ? 1 : -1
+                            switch (slotSort.key) {
+                              case "slot":
+                                return (
+                                  a.slot.labelCode.localeCompare(b.slot.labelCode, undefined, {
+                                    numeric: true,
+                                  }) * dir
+                                )
+                              case "price":
+                                return (a.slot.price - b.slot.price) * dir
+                              case "fill": {
+                                const af = a.slot.capacity ? a.slot.currentQuantity / a.slot.capacity : 0
+                                const bf = b.slot.capacity ? b.slot.currentQuantity / b.slot.capacity : 0
+                                return (af - bf) * dir
+                              }
+                              case "margin":
+                              default: {
+                                if (a.margin === null && b.margin === null) return 0
+                                if (a.margin === null) return 1
+                                if (b.margin === null) return -1
+                                return (a.margin - b.margin) * dir
+                              }
+                            }
+                          })
+                          return (
+                            <div className="rounded-md border overflow-hidden">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="w-14">{sortHead("slot", "Slot")}</TableHead>
+                                    <TableHead>Product</TableHead>
+                                    <TableHead className="text-right">{sortHead("price", "Price")}</TableHead>
+                                    <TableHead className="text-right">Cost</TableHead>
+                                    <TableHead className="text-right">{sortHead("margin", "Margin")}</TableHead>
+                                    <TableHead className="text-right">{sortHead("fill", "Fill")}</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {rows.map(({ slot, costPerUnit, margin }) => {
+                                    const low =
+                                      slot.capacity > 0 && slot.currentQuantity / slot.capacity <= 0.25
+                                    return (
+                                      <TableRow
+                                        key={slot.id}
+                                        onClick={() => handleSelectSlot(slot)}
+                                        className={`cursor-pointer ${selectedSlotId === slot.id ? "bg-muted" : ""}`}
+                                      >
+                                        <TableCell className="font-medium">{slot.labelCode}</TableCell>
+                                        <TableCell>
+                                          {slot.productId ? (
+                                            <div className="flex items-center gap-2 min-w-0">
+                                              {slot.productImage && (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img
+                                                  src={slot.productImage}
+                                                  alt=""
+                                                  className="w-6 h-6 object-contain shrink-0"
+                                                />
+                                              )}
+                                              <span className="truncate">{slot.productName}</span>
+                                            </div>
+                                          ) : (
+                                            <span className="text-muted-foreground italic">Empty</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                          {slot.productId ? `$${slot.price.toFixed(2)}` : "—"}
+                                        </TableCell>
+                                        <TableCell className="text-right text-muted-foreground">
+                                          {costPerUnit !== null ? `$${costPerUnit.toFixed(2)}` : "—"}
+                                        </TableCell>
+                                        <TableCell className={`text-right font-medium ${marginTextColor(margin)}`}>
+                                          {margin !== null ? `${margin}%` : "—"}
+                                        </TableCell>
+                                        <TableCell className={`text-right tabular-nums ${low ? "text-amber-500" : ""}`}>
+                                          {slot.currentQuantity}/{slot.capacity}
+                                        </TableCell>
+                                      </TableRow>
+                                    )
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )
+                        })()
+                      )}
                     </div>
                   </div>
                   {/* Slot detail / quick-edit panel */}

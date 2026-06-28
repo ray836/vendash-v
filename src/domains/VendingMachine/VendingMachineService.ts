@@ -32,6 +32,7 @@ export async function getMachines(
     status: machine.status,
     organizationId: machine.organizationId,
     cardReaderId: machine.cardReaderId,
+    displayId: machine.displayId,
     createdAt: machine.createdAt,
     updatedAt: machine.updatedAt,
   }))
@@ -87,7 +88,8 @@ export async function createMachine(
   machineRepo: VendingMachineRepository,
   data: CreateVendingMachineRequestDTO
 ): Promise<VendingMachine> {
-  const machine = VendingMachine.create(data)
+  const displayId = await machineRepo.nextDisplayId(data.organizationId)
+  const machine = VendingMachine.create({ ...data, displayId })
   return await machineRepo.create(machine)
 }
 
@@ -136,11 +138,11 @@ export async function updateMachineInfo(
   return updated.toPublicDTO()
 }
 
-export async function deleteMachine(
+export async function archiveMachine(
   machineRepo: VendingMachineRepository,
   id: string
 ): Promise<void> {
   const existing = await machineRepo.findById(id)
   if (!existing) throw new Error("Vending machine not found")
-  await machineRepo.delete(id)
+  await machineRepo.archive(id)
 }

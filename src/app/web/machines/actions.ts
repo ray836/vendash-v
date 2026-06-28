@@ -4,6 +4,7 @@ import { db } from "@/infrastructure/database"
 import { VendingMachineRepository } from "@/infrastructure/repositories/VendingMachineRepository"
 import { LocationRepository } from "@/infrastructure/repositories/LocationRepository"
 import { TransactionRepository } from "@/infrastructure/repositories/TransactionRepository"
+import { SlotRepository } from "@/infrastructure/repositories/SlotRepository"
 import * as VendingMachineService from "@/domains/VendingMachine/VendingMachineService"
 import * as LocationService from "@/domains/Location/LocationService"
 import * as TransactionService from "@/domains/Transaction/TransactionService"
@@ -75,9 +76,9 @@ export async function getLocations() {
   return LocationService.getLocations(locationRepo, organizationId)
 }
 
-export async function deleteMachine(id: string) {
+export async function archiveMachine(id: string) {
   const machineRepo = new VendingMachineRepository(db)
-  await VendingMachineService.deleteMachine(machineRepo, id)
+  await VendingMachineService.archiveMachine(machineRepo, id)
 }
 
 export async function getMachinePerformance() {
@@ -115,6 +116,8 @@ export async function getMachinePerformance() {
       const margin = revenue > 0 && profit !== null ? Math.round((profit / revenue) * 100) : null
       return {
         id: m.id,
+        model: m.model,
+        displayId: m.displayId ?? null,
         locationName: m.locationName ?? null,
         revenue: Math.round(revenue * 100) / 100,
         profit,
@@ -126,4 +129,37 @@ export async function getMachinePerformance() {
     .sort((a, b) => (b.margin ?? -1) - (a.margin ?? -1))
 
   return results
+}
+
+/**
+ * Per-machine stock snapshot derived from configured (product-assigned) slots.
+ * Returns null pctStocked for machines that have no configured slots yet.
+ */
+export async function getMachinesStock() {
+  const session = await auth()
+  if (!session) throw new Error("Unauthorized")
+  const { organizationId } = session.user
+
+  const machineRepo = new VendingMachineRepository(db)
+  const locationRepo = new LocationRepository(db)
+  const slotRepo = new SlotRepository(db)
+
+  const machines = await VendingMachineService.getMachines(machineRepo, locationRepo, organizationId)
+
+  return Promise.all(
+    machines.map(async (m) => {
+      const slots = await slotRepo.getSlotsWithProducts(m.id)
+      const configured = slots.filter((s) => s.productId)
+      const totalCapacity = configured.reduce((sum, s) => sum + (s.capacity || 0), 0)
+      const totalQuantity = configured.reduce((sum, s) => sum + (s.currentQuantity || 0), 0)
+      const emptySlots = configured.filter((s) => (s.currentQuantity || 0) === 0).length
+      const pctStocked = totalCapacity > 0 ? Math.round((totalQuantity / totalCapacity) * 100) : null
+      return {
+        id: m.id,
+        slotCount: configured.length,
+        emptySlots,
+        pctStocked,
+      }
+    })
+  )
 }

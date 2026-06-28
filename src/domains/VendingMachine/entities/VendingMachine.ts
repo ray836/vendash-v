@@ -26,6 +26,8 @@ export const VendingMachineSchema = z.object({
   ]),
   organizationId: z.string().uuid(),
   cardReaderId: z.string().optional(),
+  displayId: z.number().int().positive().optional(),
+  archivedAt: z.date().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
   createdBy: z.string(),
@@ -43,6 +45,8 @@ export class VendingMachine {
   readonly status: MachineStatus
   readonly organizationId: string
   readonly cardReaderId?: string
+  readonly displayId?: number
+  readonly archivedAt?: Date
   readonly createdAt: Date
   readonly updatedAt: Date
   readonly createdBy: string
@@ -57,6 +61,8 @@ export class VendingMachine {
     this.status = props.status
     this.organizationId = props.organizationId
     this.cardReaderId = props.cardReaderId
+    this.displayId = props.displayId
+    this.archivedAt = props.archivedAt
     this.createdAt = props.createdAt
     this.updatedAt = props.updatedAt
     this.createdBy = props.createdBy
@@ -66,7 +72,7 @@ export class VendingMachine {
   static create(
     props: Omit<
       VendingMachineProps,
-      "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy" | "status"
+      "id" | "createdAt" | "updatedAt" | "createdBy" | "updatedBy" | "status" | "archivedAt"
     >
   ): VendingMachine {
     return new VendingMachine({
@@ -112,6 +118,7 @@ export class VendingMachine {
       updatedAt: this.updatedAt,
       notes: this.notes,
       cardReaderId: this.cardReaderId,
+      displayId: this.displayId,
     }
   }
 }

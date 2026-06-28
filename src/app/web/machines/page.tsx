@@ -8,11 +8,11 @@ import {
   CardHeader,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Package, TrendingUp } from "lucide-react"
+import { MapPin, Package, TrendingUp, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
-import { getMachines, getMachinePerformance } from "./actions"
+import { getMachines, getMachinePerformance, getMachinesStock } from "./actions"
 // Update the interface to match your actual data model
 interface VendingMachine {
   id: string
@@ -23,7 +23,8 @@ interface VendingMachine {
   notes: string
   organizationId: string
   cardReaderId: string | null
-  status?: "Online" | "Maintenance" | "Low Stock" | "Offline" // This would need to come from a different source
+  displayId?: number | null
+  status?: "Online" | "Maintenance" | "Low Stock" | "Offline"
 }
 
 // Sample vending machine data
@@ -103,29 +104,51 @@ function statusVariant(status?: string) {
   return "outline"
 }
 
-function displayId(id: string) {
-  // If it looks like a UUID, show a shortened version
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id)) return id.slice(0, 8).toUpperCase()
-  return id
+function typeLabel(type: string) {
+  return type === "SNACK" ? "Snack" : type === "DRINK" ? "Drink" : type
 }
 
-function VendingMachineCard({ machine }: { machine: VendingMachine }) {
+// Composite health: worst-case across machine status and stock level.
+function healthColor(machine: VendingMachine, stock?: MachineStock): "green" | "amber" | "red" {
+  const s = (machine.status ?? "").toLowerCase()
+  if (s === "offline" || s === "maintenance") return "red"
+  if (s === "low stock") return "amber"
+  if (stock) {
+    if (stock.emptySlots > 0) return "amber"
+    if (stock.pctStocked !== null && stock.pctStocked < 30) return "amber"
+  }
+  return "green"
+}
+
+function stockBarColor(pct: number) {
+  if (pct < 30) return "bg-red-500"
+  if (pct < 60) return "bg-amber-500"
+  return "bg-green-500"
+}
+
+function VendingMachineCard({
+  machine,
+  perf,
+  stock,
+}: {
+  machine: VendingMachine
+  perf?: MachinePerf
+  stock?: MachineStock
+}) {
+  const dot = healthColor(machine, stock)
+  const dotClass = dot === "green" ? "bg-green-500" : dot === "amber" ? "bg-amber-500" : "bg-red-500"
+  const pct = stock?.pctStocked ?? null
+
   return (
     <Card className="w-full flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start gap-2">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold leading-tight">{displayId(machine.id)}</span>
-              <Badge variant="outline" className="text-xs font-normal capitalize">
-                {machine.type === "DRINK" ? "Drink" : machine.type === "SNACK" ? "Snack" : machine.type}
-              </Badge>
-            </div>
-            {machine.locationName && (
-              <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
-                <MapPin className="h-3.5 w-3.5 shrink-0" />
-                <span>{machine.locationName}</span>
-              </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dotClass}`} aria-hidden />
+            <span className="text-lg font-bold leading-tight truncate">{machine.model}</span>
+            <Badge variant="outline" className="text-xs font-normal shrink-0">{typeLabel(machine.type)}</Badge>
+            {machine.displayId && (
+              <span className="text-xs font-mono text-muted-foreground shrink-0">#{machine.displayId}</span>
             )}
           </div>
           <Badge variant={statusVariant(machine.status)} className="shrink-0 mt-0.5">
@@ -134,27 +157,43 @@ function VendingMachineCard({ machine }: { machine: VendingMachine }) {
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 pb-3">
-        <div className="space-y-2 text-sm">
-          {machine.model && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Model</span>
-              <span className="font-medium">{machine.model}</span>
-            </div>
-          )}
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Card reader</span>
-            {machine.cardReaderId ? (
-              <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{machine.cardReaderId}</span>
+      <CardContent className="flex-1 pb-3 space-y-3">
+        {/* Stock level */}
+        <div>
+          <div className="flex items-center justify-between text-sm mb-1.5">
+            <span className="text-muted-foreground">Stocked</span>
+            {pct !== null ? (
+              <span className="font-medium">{pct}%</span>
             ) : (
-              <span className="text-muted-foreground text-xs italic">Not configured</span>
+              <span className="text-xs text-muted-foreground italic">Not set up</span>
             )}
           </div>
-          {machine.notes && machine.notes.trim() && (
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground shrink-0">Notes</span>
-              <span className="text-right text-xs">{machine.notes}</span>
+          {pct !== null && (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                <div className={`h-2 rounded-full transition-all ${stockBarColor(pct)}`} style={{ width: `${pct}%` }} />
+              </div>
+              {stock!.emptySlots > 0 && (
+                <span className="flex items-center gap-1 text-xs text-amber-600 shrink-0">
+                  <AlertTriangle className="h-3 w-3" /> {stock!.emptySlots} empty
+                </span>
+              )}
             </div>
+          )}
+        </div>
+
+        {/* Revenue this month */}
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">This month</span>
+          {perf ? (
+            <span className="font-medium">
+              ${perf.revenue.toFixed(0)}
+              {perf.margin !== null && (
+                <span className="text-muted-foreground font-normal"> · {perf.margin}% margin</span>
+              )}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">No sales yet</span>
           )}
         </div>
       </CardContent>
@@ -171,6 +210,8 @@ function VendingMachineCard({ machine }: { machine: VendingMachine }) {
 // Update the component to properly handle the fetched data
 type MachinePerf = {
   id: string
+  model: string
+  displayId: number | null
   locationName: string | null
   revenue: number
   profit: number | null
@@ -178,9 +219,17 @@ type MachinePerf = {
   txCount: number
 }
 
+type MachineStock = {
+  id: string
+  slotCount: number
+  emptySlots: number
+  pctStocked: number | null
+}
+
 export default function VendingMachineDashboard() {
   const [machines, setMachines] = useState<VendingMachine[]>([])
   const [perf, setPerf] = useState<MachinePerf[]>([])
+  const [stock, setStock] = useState<MachineStock[]>([])
   const searchParams = useSearchParams()
   const attentionFilter = searchParams.get("attention") === "1"
 
@@ -202,9 +251,21 @@ export default function VendingMachineDashboard() {
         console.error("Failed to fetch performance:", error)
       }
     }
+    const fetchStock = async () => {
+      try {
+        const data = await getMachinesStock()
+        setStock(data)
+      } catch (error) {
+        console.error("Failed to fetch stock:", error)
+      }
+    }
     fetchMachines()
     fetchPerf()
+    fetchStock()
   }, [])
+
+  const perfById = new Map(perf.map((p) => [p.id, p]))
+  const stockById = new Map(stock.map((s) => [s.id, s]))
 
   const displayedMachines = attentionFilter
     ? machines.filter((m) => (m.status ?? "").toUpperCase() !== "ONLINE")
@@ -230,22 +291,34 @@ export default function VendingMachineDashboard() {
 
       {/* Performance ranking — only shows when ≥2 machines have transaction data */}
       {!attentionFilter && perf.length >= 2 && (() => {
-        const maxMargin = Math.max(...perf.map((m) => m.margin ?? 0), 1)
-        const lowestId = perf[perf.length - 1]?.id
+        const ranked = [...perf].sort((a, b) => b.revenue - a.revenue)
+        const maxRevenue = Math.max(...ranked.map((m) => m.revenue), 1)
+        const fleetRevenue = ranked.reduce((sum, m) => sum + m.revenue, 0)
+        const margins = ranked.filter((m) => m.margin !== null)
+        const lowestMarginId =
+          margins.length >= 3
+            ? margins.reduce((lo, m) => (m.margin! < lo.margin! ? m : lo)).id
+            : null
         return (
           <div className="mb-6 rounded-lg border overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border-b">
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">Performance This Month</span>
+            <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-muted/40 border-b">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Revenue This Month</span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                <span className="text-sm font-semibold text-foreground">${fleetRevenue.toFixed(0)}</span>
+                {" "}across {ranked.length} machines · bar length = revenue
+              </div>
             </div>
             <div className="divide-y">
-              {perf.map((m) => {
-                const barPct = m.margin !== null ? Math.round((m.margin / maxMargin) * 100) : 0
-                const isLowest = m.id === lowestId && perf.length >= 3
+              {ranked.map((m) => {
+                const barPct = Math.round((m.revenue / maxRevenue) * 100)
+                const isLowest = m.id === lowestMarginId
                 return (
                   <Link key={m.id} href={`/web/machines/${m.id}`} className="flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors">
-                    <div className="w-20 flex-shrink-0">
-                      <p className="text-sm font-semibold truncate">{m.id.length > 8 ? m.id.slice(0, 8).toUpperCase() : m.id}</p>
+                    <div className="w-32 flex-shrink-0">
+                      <p className="text-sm font-semibold truncate">{m.model} {m.displayId ? `#${m.displayId}` : ""}</p>
                       {m.locationName && <p className="text-xs text-muted-foreground truncate">{m.locationName}</p>}
                     </div>
                     <div className="flex-1 flex items-center gap-3 min-w-0">
@@ -255,18 +328,23 @@ export default function VendingMachineDashboard() {
                           style={{ width: `${barPct}%` }}
                         />
                       </div>
-                      <span className="text-sm font-medium w-10 text-right flex-shrink-0">
+                      <div className="w-20 text-right flex-shrink-0">
+                        <p className="text-sm font-semibold leading-tight">${m.revenue.toFixed(0)}</p>
+                        <p className="text-xs text-muted-foreground leading-tight">revenue</p>
+                      </div>
+                    </div>
+                    <div className="w-12 text-right flex-shrink-0">
+                      <p className="text-sm font-medium leading-tight">
                         {m.margin !== null ? `${m.margin}%` : "—"}
-                      </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground leading-tight">margin</p>
                     </div>
-                    <div className="w-20 text-right flex-shrink-0">
-                      <p className="text-sm font-semibold">${m.revenue.toFixed(0)}</p>
-                      <p className="text-xs text-muted-foreground">revenue</p>
-                    </div>
-                    {isLowest && (
+                    {isLowest ? (
                       <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 bg-amber-500/5 flex-shrink-0">
-                        Lowest
+                        Lowest margin
                       </Badge>
+                    ) : (
+                      <span className="w-[92px] flex-shrink-0" aria-hidden />
                     )}
                   </Link>
                 )
@@ -321,7 +399,12 @@ export default function VendingMachineDashboard() {
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {groups[loc].map((machine) => (
-                    <VendingMachineCard key={machine.id} machine={machine} />
+                    <VendingMachineCard
+                      key={machine.id}
+                      machine={machine}
+                      perf={perfById.get(machine.id)}
+                      stock={stockById.get(machine.id)}
+                    />
                   ))}
                 </div>
               </div>

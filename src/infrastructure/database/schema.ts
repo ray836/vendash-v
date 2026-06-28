@@ -24,6 +24,8 @@ export const vendingMachines = pgTable("vending_machines", {
     .references(() => organizations.id)
     .notNull(),
   cardReaderId: text("card_reader_id"),
+  displayId: integer("display_id"),
+  archivedAt: timestamp("archived_at"),
   createdBy: text("created_by")
     .references(() => users.id)
     .notNull(),

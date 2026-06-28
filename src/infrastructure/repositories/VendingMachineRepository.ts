@@ -6,7 +6,7 @@ import {
 import { UpdateVendingMachineInfoRequestDTO } from "@/domains/VendingMachine/schemas/UpdateVendingMachineInfoSchemas"
 import { db } from "../database"
 import { vendingMachines } from "../database/schema"
-import { eq } from "drizzle-orm"
+import { eq, and, isNull, max } from "drizzle-orm"
 
 export class VendingMachineRepository {
   constructor(private readonly database: typeof db) {}
@@ -21,9 +21,20 @@ export class VendingMachineRepository {
 
   async findByOrganizationId(organizationId: string): Promise<VendingMachine[]> {
     const machines = await this.database.query.vendingMachines.findMany({
-      where: eq(vendingMachines.organizationId, organizationId),
+      where: and(
+        eq(vendingMachines.organizationId, organizationId),
+        isNull(vendingMachines.archivedAt)
+      ),
     })
     return machines.map(this.toEntity)
+  }
+
+  async nextDisplayId(organizationId: string): Promise<number> {
+    const result = await this.database
+      .select({ maxId: max(vendingMachines.displayId) })
+      .from(vendingMachines)
+      .where(eq(vendingMachines.organizationId, organizationId))
+    return (result[0]?.maxId ?? 0) + 1
   }
 
   async create(vendingMachine: VendingMachine): Promise<VendingMachine> {
@@ -38,6 +49,7 @@ export class VendingMachineRepository {
         status: vendingMachine.status,
         organizationId: vendingMachine.organizationId,
         cardReaderId: vendingMachine.cardReaderId,
+        displayId: vendingMachine.displayId,
         createdAt: vendingMachine.createdAt,
         updatedAt: vendingMachine.updatedAt,
         createdBy: vendingMachine.createdBy,
@@ -63,6 +75,13 @@ export class VendingMachineRepository {
       .where(eq(vendingMachines.id, vendingMachine.id))
       .returning()
     return this.toEntity(machine)
+  }
+
+  async archive(id: string): Promise<void> {
+    await this.database
+      .update(vendingMachines)
+      .set({ archivedAt: new Date() })
+      .where(eq(vendingMachines.id, id))
   }
 
   async delete(id: string): Promise<void> {
@@ -100,6 +119,8 @@ export class VendingMachineRepository {
       status: machine.status.toUpperCase() as MachineStatus,
       organizationId: machine.organizationId,
       cardReaderId: machine.cardReaderId ?? undefined,
+      displayId: machine.displayId ?? undefined,
+      archivedAt: machine.archivedAt ?? undefined,
       createdAt: machine.createdAt,
       updatedAt: machine.updatedAt,
       createdBy: machine.createdBy,
