@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const user = await getApiUser()
   if (!user) return unauthorizedResponse()
 
-  if (user.role !== 'admin') {
+  if (user.role?.toLowerCase() !== 'admin') {
     return NextResponse.json(
       { success: false, error: 'Forbidden' },
       { status: 403, headers: corsHeaders }
