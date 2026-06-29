@@ -624,16 +624,30 @@ export async function addProductsToOrderForOrg(
 
     await OrderService.consolidateDraftOrders(orderRepo, productRepo, organizationId, userId)
 
+    // Each item's quantity is the desired total on the order; only top up the
+    // shortfall so re-adding (or products already on the order) doesn't double up.
+    const currentOrder = await orderRepo.findDraftOrderByOrganizationId(organizationId)
+    const existingItems = currentOrder ? await orderRepo.findOrderItems(currentOrder.id) : []
+    const onOrderByProduct = new Map<string, number>()
+    for (const existing of existingItems) {
+      onOrderByProduct.set(existing.productId, existing.quantity)
+    }
+
+    let added = 0
     for (const item of items) {
+      const alreadyOnOrder = onOrderByProduct.get(item.productId) ?? 0
+      const delta = item.quantity - alreadyOnOrder
+      if (delta <= 0) continue
       await OrderService.addItemToCurrentOrder(orderRepo, productRepo, {
         organizationId,
         productId: item.productId,
-        quantity: item.quantity,
+        quantity: delta,
         userId,
       })
+      added++
     }
 
-    return { success: true as const, added: items.length }
+    return { success: true as const, added }
   } catch (error) {
     console.error("addProductsToOrderForOrg:", error)
     return { success: false as const, error: "Failed to add items to order" }
