@@ -725,6 +725,55 @@ export async function removeDraftOrderItemForOrg(
   }
 }
 
+// Place the org's current draft order (org-scoped). Builds the place request
+// from the draft + its items so API clients don't have to assemble it.
+export async function placeDraftOrderForOrg(organizationId: string, userId: string) {
+  try {
+    const orderRepo = new OrderRepository(db)
+    const productRepo = new ProductRepository(db)
+    const inventoryRepo = new InventoryRepository(db)
+    const inventoryTransactionRepo = new InventoryTransactionRepository(db)
+
+    const order = await orderRepo.findDraftOrderByOrganizationId(organizationId)
+    if (!order) return { success: false as const, error: "No draft order" }
+
+    const items = await orderRepo.findOrderItems(order.id)
+    if (items.length === 0) return { success: false as const, error: "Order is empty" }
+
+    const totalAmount = items.reduce((acc, item) => acc + item.totalPrice, 0)
+
+    const placed = await OrderService.placeCurrentOrder(
+      orderRepo,
+      productRepo,
+      inventoryRepo,
+      inventoryTransactionRepo,
+      {
+        id: order.id,
+        organizationId,
+        status: "placed",
+        scheduledOrderDate: order.props.scheduledOrderDate,
+        orderPlacedDate: new Date(),
+        taxPaid: order.props.taxPaid,
+        shippingCost: order.props.shippingCost,
+        totalAmount,
+        placedBy: userId,
+        orderItems: items.map((item) => ({
+          id: item.id,
+          orderId: order.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      }
+    )
+
+    return { success: true as const, total: totalAmount, itemCount: items.length, order: placed }
+  } catch (error) {
+    console.error("placeDraftOrderForOrg:", error)
+    return { success: false as const, error: error instanceof Error ? error.message : "Failed to place order" }
+  }
+}
+
 export async function getAllProducts() {
   const session = await auth()
   if (!session) throw new Error('Unauthorized')
