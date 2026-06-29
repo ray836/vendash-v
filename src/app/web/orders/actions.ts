@@ -611,6 +611,35 @@ export async function addMultipleProductsToOrder(items: { productId: string; qua
   }
 }
 
+// Org-parameterized variant for API clients (mobile) authenticated via getApiUser,
+// mirroring addMultipleProductsToOrder which relies on the web auth() session.
+export async function addProductsToOrderForOrg(
+  organizationId: string,
+  userId: string,
+  items: { productId: string; quantity: number }[]
+) {
+  try {
+    const orderRepo = new OrderRepository(db)
+    const productRepo = new ProductRepository(db)
+
+    await OrderService.consolidateDraftOrders(orderRepo, productRepo, organizationId, userId)
+
+    for (const item of items) {
+      await OrderService.addItemToCurrentOrder(orderRepo, productRepo, {
+        organizationId,
+        productId: item.productId,
+        quantity: item.quantity,
+        userId,
+      })
+    }
+
+    return { success: true as const, added: items.length }
+  } catch (error) {
+    console.error("addProductsToOrderForOrg:", error)
+    return { success: false as const, error: "Failed to add items to order" }
+  }
+}
+
 export async function getAllProducts() {
   const session = await auth()
   if (!session) throw new Error('Unauthorized')
