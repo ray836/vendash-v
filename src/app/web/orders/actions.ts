@@ -9,6 +9,7 @@ import { PreKitRepository } from "@/infrastructure/repositories/PreKitRepository
 import { SlotRepository } from "@/infrastructure/repositories/SlotRepository"
 import { TransactionRepository } from "@/infrastructure/repositories/TransactionRepository"
 import * as OrderService from "@/domains/Order/OrderService"
+import { Order } from "@/domains/Order/entities/Order"
 import * as PreKitService from "@/domains/PreKit/PreKitService"
 import { PlaceCurrentOrderRequestDTO } from "@/domains/Order/schemas/orderDTOs"
 import { auth } from "@/lib/auth"
@@ -651,6 +652,76 @@ export async function addProductsToOrderForOrg(
   } catch (error) {
     console.error("addProductsToOrderForOrg:", error)
     return { success: false as const, error: "Failed to add items to order" }
+  }
+}
+
+// Recompute and persist a draft order's total from its line items.
+async function recomputeDraftOrderTotal(
+  orderRepo: OrderRepository,
+  orderId: string,
+  userId: string
+) {
+  const items = await orderRepo.findOrderItems(orderId)
+  const total = items.reduce((acc, item) => acc + item.totalPrice, 0)
+  const order = await orderRepo.findById(orderId)
+  if (order) {
+    await orderRepo.update(new Order({ ...order.props, totalAmount: total, updatedAt: new Date(), updatedBy: userId }))
+  }
+}
+
+// Set an order item's quantity on the org's draft order (org-validated). A
+// quantity of 0 or less removes the item. Recomputes the order total.
+export async function updateDraftOrderItemForOrg(
+  organizationId: string,
+  userId: string,
+  orderItemId: string,
+  quantity: number
+) {
+  try {
+    const orderRepo = new OrderRepository(db)
+    const order = await orderRepo.findDraftOrderByOrganizationId(organizationId)
+    if (!order) return { success: false as const, error: "No draft order" }
+
+    const items = await orderRepo.findOrderItems(order.id)
+    if (!items.some((item) => item.id === orderItemId)) {
+      return { success: false as const, error: "Item not found" }
+    }
+
+    if (quantity <= 0) {
+      await OrderService.removeOrderItem(orderRepo, { orderItemId, userId })
+    } else {
+      await OrderService.updateOrderItemQuantity(orderRepo, { orderItemId, orderId: order.id, quantity, userId })
+    }
+    await recomputeDraftOrderTotal(orderRepo, order.id, userId)
+    return { success: true as const }
+  } catch (error) {
+    console.error("updateDraftOrderItemForOrg:", error)
+    return { success: false as const, error: "Failed to update item" }
+  }
+}
+
+// Remove an order item from the org's draft order (org-validated). Recomputes total.
+export async function removeDraftOrderItemForOrg(
+  organizationId: string,
+  userId: string,
+  orderItemId: string
+) {
+  try {
+    const orderRepo = new OrderRepository(db)
+    const order = await orderRepo.findDraftOrderByOrganizationId(organizationId)
+    if (!order) return { success: false as const, error: "No draft order" }
+
+    const items = await orderRepo.findOrderItems(order.id)
+    if (!items.some((item) => item.id === orderItemId)) {
+      return { success: false as const, error: "Item not found" }
+    }
+
+    await OrderService.removeOrderItem(orderRepo, { orderItemId, userId })
+    await recomputeDraftOrderTotal(orderRepo, order.id, userId)
+    return { success: true as const }
+  } catch (error) {
+    console.error("removeDraftOrderItemForOrg:", error)
+    return { success: false as const, error: "Failed to remove item" }
   }
 }
 
